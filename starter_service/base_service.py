@@ -22,6 +22,7 @@ class StarterService(ABC):
         self._DEBUG = strtobool(os.getenv("DEBUG", "false"))
 
         self._validate_params()
+        self._init_starter_params()
         self._init_logger()
         self.logger.info(
             f"Initializing\n\tCLIENT_ID {self._CLIENT_ID}\n\tPRODUCE {self._PRODUCE}\n\tCONSUME {self._CONSUME}")
@@ -54,7 +55,7 @@ class StarterService(ABC):
         listener_threads = []
 
         # Create threads for each consume topic
-        for topic in self._CONSUME.split(','):
+        for topic in self._CONSUME:
             self._test_bed_adapter.consumer_managers[topic].on_message += handle_message
 
             listener_threads.append(threading.Thread(
@@ -84,7 +85,7 @@ class StarterService(ABC):
         pass
 
     def send_message(self, message):
-        for topic in self._PRODUCE.split(','):
+        for topic in self._PRODUCE:
             if self._DEBUG:
                 self.logger.info(f"Sending message to {topic}\n{message}")
             self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
@@ -101,3 +102,7 @@ class StarterService(ABC):
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s')
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
+
+    def _init_starter_params(self):
+        self._CONSUME = [param.strip() for param in self._CONSUME.split(',')]
+        self._PRODUCE = [param.strip() for param in self._PRODUCE.split(',')]
