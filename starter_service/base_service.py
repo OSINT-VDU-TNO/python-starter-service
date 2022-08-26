@@ -84,11 +84,17 @@ class StarterService(ABC):
     def handle_article(self, article: dict):
         pass
 
-    def send_message(self, message):
-        for topic in self._PRODUCE:
-            if self._DEBUG:
-                self.logger.info(f"Sending message to {topic}\n{message}")
-            self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
+    def send_message(self, message, topics=None):
+        if topics:
+            for topic in topics.split(','):
+                if self._DEBUG:
+                    self.logger.info(f"Sending message to {topic}\n{message}")
+                self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
+        else:
+            for topic in self._PRODUCE:
+                if self._DEBUG:
+                    self.logger.info(f"Sending message to {topic}\n{message}")
+                self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
 
     def _validate_params(self):
         if self._CONSUME is None:
