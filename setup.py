@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="osint-python-starter-service",
-    version="0.1.2",
+    version="1.0.0",
     author="mindpetk",
     author_email="petkeviciusm@gmail.com",
     description="Python starter service",

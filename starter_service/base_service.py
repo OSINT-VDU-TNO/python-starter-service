@@ -1,53 +1,66 @@
 import logging
-import os
 import threading
 import time
 from abc import abstractmethod, ABC
-from distutils.util import strtobool
 
-from test_bed_adapter import TestBedAdapter, TestBedOptions
+from environs import Env
+
+from test_bed_adapter import ProducerManager, TestBedOptions, TestBedAdapter, ConsumerManager
+
+_env = Env()
+
+KAFKA_HOST = _env('KAFKA_HOST', '127.0.0.1:3501')
+SCHEMA_REGISTRY = _env('SCHEMA_REGISTRY', 'http://localhost:3502')
+CONSUME = _env('CONSUME')
+PRODUCE = _env('PRODUCE')
+CLIENT_ID = _env('CLIENT_ID')
+DEBUG = _env.bool("DEBUG", False)
+PARTITIONER = _env("PARTITIONER", "random")
+MESSAGE_MAX_BYTES = _env.int('MESSAGE_MAX_BYTES', 1000000)
+HEARTBEAT_INTERVAL = _env.int('HEARTBEAT_INTERVAL', 10)
+OFFSET_TYPE = _env('OFFSET_TYPE', 'earliest')
+VACUUM_TIME = _env.int('VACUUM_TIME', 86400)
+
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s')
 
 
 class StarterService(ABC):
+    logger = logging.getLogger()
 
-    def __init__(self, CONSUME: str = None, PRODUCE: str = None, CLIENT_ID: str = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self._test_bed_adapter = None
 
-        self._KAFKA_HOST = os.environ.get('KAFKA_HOST', '127.0.0.1:3501')
-        self._SCHEMA_REGISTRY = os.environ.get('SCHEMA_REGISTRY', 'http://localhost:3502')
-        self._CONSUME = os.environ.get('CONSUME', CONSUME)
-        self._PRODUCE = os.environ.get('PRODUCE', PRODUCE)
-        self._CLIENT_ID = os.environ.get('CLIENT_ID', CLIENT_ID)
-        self._DEBUG = strtobool(os.getenv("DEBUG", "false"))
+        self._producers = {}
+        self._consumers = {}
+        self._test_bed_options = None
 
         self._validate_params()
         self._init_starter_params()
-        self._init_logger()
         self.logger.info(
-            f"Initializing\n\tCLIENT_ID {self._CLIENT_ID}\n\tPRODUCE {self._PRODUCE}\n\tCONSUME {self._CONSUME}")
+            f"Initializing\n\tCLIENT_ID {CLIENT_ID}\n\tPRODUCE {PRODUCE}\n\tCONSUME {CONSUME}")
 
     def start(self):
-        self.logger.info("initializing kafka")
+        """Start the service"""
+        self.logger.info("Initializing kafka")
         options = {
-            "kafka_host": self._KAFKA_HOST,
-            "schema_registry": self._SCHEMA_REGISTRY,
-            "fetch_all_versions": False,
-            "from_off_set": True,
-            "client_id": self._CLIENT_ID,
-            "consume": self._CONSUME,
-            "produce": self._PRODUCE
+            "kafka_host": KAFKA_HOST,
+            "schema_registry": SCHEMA_REGISTRY,
+            "partitioner": PARTITIONER,
+            "consumer_group": CLIENT_ID,
+            "message_max_bytes": MESSAGE_MAX_BYTES,
+            "offset_type": OFFSET_TYPE,
+            "heartbeat_interval": HEARTBEAT_INTERVAL
         }
-
+        self._test_bed_options = TestBedOptions(options)
         self._test_bed_adapter = TestBedAdapter(TestBedOptions(options))
 
         def handle_message(message):
             self.logger.info("Received message")
             try:
-                article = message['decoded_value'][0]
-                if self._DEBUG:
-                    self.logger.info(f"Article {article}")
-                self.handle_article(article)
+                if DEBUG:
+                    self.logger.info(f"Message {message}")
+                self.handle_article(message)
             except Exception as e:
                 self.logger.error(e)
 
@@ -55,60 +68,77 @@ class StarterService(ABC):
         listener_threads = []
 
         # Create threads for each consume topic
-        for topic in self._CONSUME:
-            self._test_bed_adapter.consumer_managers[topic].on_message += handle_message
-
+        for topic in CONSUME.split(','):
             listener_threads.append(threading.Thread(
-                target=self._test_bed_adapter.consumer_managers[topic].listen_messages))
+                target=ConsumerManager(
+                    options=self._test_bed_options,
+                    kafka_topic=topic,
+                    handle_message=handle_message
+                ).listen)
+            )
 
         # start all threads
         for thread in listener_threads:
+            thread.daemon = True
             thread.start()
 
         # make sure we keep running until keyboardinterrupt
-        try:
-            while True:
-                time.sleep(1)
-                # Let the reception threads run
-        except KeyboardInterrupt:
-            self.logger.debug('Interrupted!')
+        restart_timer = 0
+        run = True
 
-        # Stop test bed
+        while run:
+            # make sure we check thread health every 10 sec
+            time.sleep(10)
+            for thread in listener_threads:
+                if not thread.is_alive() or restart_timer >= VACUUM_TIME:
+                    run = False
+            else:
+                restart_timer += 10
+
+            # Stop test bed
         self._test_bed_adapter.stop()
+        for producer in self._producers.values():
+            producer.stop()
 
         # Clean after ourselves
         for thread in listener_threads:
-            thread.join()
+            thread.join(5)
+
+        raise Exception
 
     @abstractmethod
     def handle_article(self, article: dict):
+        """Handle article"""
         pass
 
     def send_message(self, message, topics=None):
+        """Send message to kafka topic"""
         if topics:
             for topic in topics.split(','):
-                if self._DEBUG:
-                    self.logger.info(f"Sending message to {topic}\n{message}")
-                self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
+                if topic in self._producers:
+                    if DEBUG:
+                        self.logger.info(f"Sending message to {topic}\n{message}")
+                    self._producers[topic].send_messages(messages=[message])
         else:
-            for topic in self._PRODUCE:
-                if self._DEBUG:
+            for topic, producer in self._producers.values():
+                if DEBUG:
                     self.logger.info(f"Sending message to {topic}\n{message}")
-                self._test_bed_adapter.producer_managers[topic].send_messages([{"message": message}])
+                producer.send_messages(messages=[message])
 
     def _validate_params(self):
-        if self._CONSUME is None:
+        """Validate that all required params are set"""
+        if CONSUME is None:
             raise ValueError("CONSUME cannot be None")
-        if self._PRODUCE is None:
+        if PRODUCE is None:
             raise ValueError("PRODUCE cannot be None")
-        if self._CLIENT_ID is None:
+        if CLIENT_ID is None:
             raise ValueError("CLIENT_ID cannot be None")
 
-    def _init_logger(self):
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s')
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
-
     def _init_starter_params(self):
-        self._CONSUME = [param.strip() for param in self._CONSUME.split(',')]
-        self._PRODUCE = [param.strip() for param in self._PRODUCE.split(',')]
+        """Initialize all producers"""
+        self._producers = {
+            topic: ProducerManager(
+                options=self._test_bed_options,
+                kafka_topic=topic
+            ) for topic in PRODUCE.split(',')
+        }
