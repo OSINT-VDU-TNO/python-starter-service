@@ -5,55 +5,45 @@ from abc import abstractmethod, ABC
 
 from environs import Env
 
-from test_bed_adapter import ProducerManager, TestBedOptions, TestBedAdapter, ConsumerManager
+from test_bed_adapter import TestBedOptions, TestBedAdapter
+from test_bed_adapter.kafka.consumer_manager import ConsumerManager
+from test_bed_adapter.kafka.producer_manager import ProducerManager
 
 _env = Env()
 
+CONSUME_ENV = _env('CONSUME', None)
+PRODUCE_ENV = _env('PRODUCE', None)
+CLIENT_ID_ENV = _env('CLIENT_ID', None)
+
 KAFKA_HOST = _env('KAFKA_HOST', '127.0.0.1:3501')
 SCHEMA_REGISTRY = _env('SCHEMA_REGISTRY', 'http://localhost:3502')
-CONSUME = _env('CONSUME')
-PRODUCE = _env('PRODUCE')
-CLIENT_ID = _env('CLIENT_ID')
 DEBUG = _env.bool("DEBUG", False)
 PARTITIONER = _env("PARTITIONER", "random")
 MESSAGE_MAX_BYTES = _env.int('MESSAGE_MAX_BYTES', 1000000)
 HEARTBEAT_INTERVAL = _env.int('HEARTBEAT_INTERVAL', 10)
 OFFSET_TYPE = _env('OFFSET_TYPE', 'earliest')
-VACUUM_TIME = _env.int('VACUUM_TIME', 86400)
 
-logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class StarterService(ABC):
     logger = logging.getLogger()
 
-    def __init__(self) -> None:
+    def __init__(self, CONSUME=None, PRODUCE=None, CLIENT_ID=None) -> None:
         super().__init__()
-        self._test_bed_adapter = None
+        self._validate_params(CONSUME, PRODUCE, CLIENT_ID)
 
         self._producers = {}
         self._consumers = {}
         self._test_bed_options = None
 
-        self._validate_params()
-        self._init_starter_params()
         self.logger.info(
-            f"Initializing\n\tCLIENT_ID {CLIENT_ID}\n\tPRODUCE {PRODUCE}\n\tCONSUME {CONSUME}")
+            f"""Initializing\nCLIENT_ID {CONSUME_ENV}\n\tPRODUCE {PRODUCE_ENV}\n\tCONSUME {CLIENT_ID_ENV}\n\t""")
 
     def start(self):
         """Start the service"""
         self.logger.info("Initializing kafka")
-        options = {
-            "kafka_host": KAFKA_HOST,
-            "schema_registry": SCHEMA_REGISTRY,
-            "partitioner": PARTITIONER,
-            "consumer_group": CLIENT_ID,
-            "message_max_bytes": MESSAGE_MAX_BYTES,
-            "offset_type": OFFSET_TYPE,
-            "heartbeat_interval": HEARTBEAT_INTERVAL
-        }
-        self._test_bed_options = TestBedOptions(options)
-        self._test_bed_adapter = TestBedAdapter(TestBedOptions(options))
+        self._init_starter_params()
 
         def handle_message(message):
             self.logger.info("Received message")
@@ -68,7 +58,7 @@ class StarterService(ABC):
         listener_threads = []
 
         # Create threads for each consume topic
-        for topic in CONSUME.split(','):
+        for topic in CONSUME_ENV.split(','):
             listener_threads.append(threading.Thread(
                 target=ConsumerManager(
                     options=self._test_bed_options,
@@ -83,19 +73,17 @@ class StarterService(ABC):
             thread.start()
 
         # make sure we keep running until keyboardinterrupt
-        restart_timer = 0
         run = True
 
         while run:
             # make sure we check thread health every 10 sec
             time.sleep(10)
             for thread in listener_threads:
-                if not thread.is_alive() or restart_timer >= VACUUM_TIME:
+                if not thread.is_alive():
                     run = False
-            else:
-                restart_timer += 10
+                    self.logger.error("Thread died, shutting down")
 
-            # Stop test bed
+        # Stop test bed
         self._test_bed_adapter.stop()
         for producer in self._producers.values():
             producer.stop()
@@ -125,20 +113,36 @@ class StarterService(ABC):
                     self.logger.info(f"Sending message to {topic}\n{message}")
                 producer.send_messages(messages=[message])
 
-    def _validate_params(self):
+    def _validate_params(self, CONSUME, PRODUCE, CLIENT_ID):
         """Validate that all required params are set"""
-        if CONSUME is None:
+        global CONSUME_ENV, PRODUCE_ENV, CLIENT_ID_ENV
+        CONSUME_ENV = CONSUME_ENV or CONSUME
+        if CONSUME_ENV is None:
             raise ValueError("CONSUME cannot be None")
-        if PRODUCE is None:
+        PRODUCE_ENV = PRODUCE_ENV or PRODUCE
+        if PRODUCE_ENV is None:
             raise ValueError("PRODUCE cannot be None")
-        if CLIENT_ID is None:
+        CLIENT_ID_ENV = CLIENT_ID_ENV or CLIENT_ID
+        if CLIENT_ID_ENV is None:
             raise ValueError("CLIENT_ID cannot be None")
 
     def _init_starter_params(self):
         """Initialize all producers"""
+        options = {
+            "kafka_host": KAFKA_HOST,
+            "schema_registry": SCHEMA_REGISTRY,
+            "partitioner": PARTITIONER,
+            "consumer_group": CLIENT_ID_ENV,
+            "message_max_bytes": MESSAGE_MAX_BYTES,
+            "offset_type": OFFSET_TYPE,
+            "heartbeat_interval": HEARTBEAT_INTERVAL
+        }
+        self._test_bed_options = TestBedOptions(options)
+        self._test_bed_adapter = TestBedAdapter(TestBedOptions(options))
+
         self._producers = {
             topic: ProducerManager(
                 options=self._test_bed_options,
                 kafka_topic=topic
-            ) for topic in PRODUCE.split(',')
+            ) for topic in PRODUCE_ENV.split(',')
         }
