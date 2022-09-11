@@ -1,4 +1,3 @@
-import logging
 import threading
 import time
 from abc import abstractmethod, ABC
@@ -7,6 +6,7 @@ from environs import Env
 
 from test_bed_adapter import TestBedOptions, TestBedAdapter
 from test_bed_adapter.kafka.consumer_manager import ConsumerManager
+from test_bed_adapter.kafka.log_manager import LogManager
 from test_bed_adapter.kafka.producer_manager import ProducerManager
 
 _env = Env()
@@ -23,16 +23,13 @@ MESSAGE_MAX_BYTES = _env.int('MESSAGE_MAX_BYTES', 1000000)
 HEARTBEAT_INTERVAL = _env.int('HEARTBEAT_INTERVAL', 10)
 OFFSET_TYPE = _env('OFFSET_TYPE', 'earliest')
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 class StarterService(ABC):
-    logger = logging.getLogger()
 
     def __init__(self, CONSUME=None, PRODUCE=None, CLIENT_ID=None) -> None:
         super().__init__()
         self._validate_params(CONSUME, PRODUCE, CLIENT_ID)
-
+        self._init_options()
         self._producers = {}
         self._consumers = {}
         self._test_bed_options = None
@@ -56,6 +53,7 @@ class StarterService(ABC):
 
         self._test_bed_adapter.initialize()
         listener_threads = []
+        run = True
 
         # Create threads for each consume topic
         for topic in CONSUME_ENV.split(','):
@@ -63,7 +61,8 @@ class StarterService(ABC):
                 target=ConsumerManager(
                     options=self._test_bed_options,
                     kafka_topic=topic,
-                    handle_message=handle_message
+                    handle_message=handle_message,
+                    run=run
                 ).listen)
             )
 
@@ -73,7 +72,6 @@ class StarterService(ABC):
             thread.start()
 
         # make sure we keep running until keyboardinterrupt
-        run = True
 
         while run:
             # make sure we check thread health every 10 sec
@@ -90,7 +88,7 @@ class StarterService(ABC):
 
         # Clean after ourselves
         for thread in listener_threads:
-            thread.join(5)
+            thread.join()
 
         raise Exception
 
@@ -108,7 +106,7 @@ class StarterService(ABC):
                         self.logger.info(f"Sending message to {topic}\n{message}")
                     self._producers[topic].send_messages(messages=[message])
         else:
-            for topic, producer in self._producers.values():
+            for topic, producer in self._producers.items():
                 if DEBUG:
                     self.logger.info(f"Sending message to {topic}\n{message}")
                 producer.send_messages(messages=[message])
@@ -119,15 +117,17 @@ class StarterService(ABC):
         CONSUME_ENV = CONSUME_ENV or CONSUME
         if CONSUME_ENV is None:
             raise ValueError("CONSUME cannot be None")
+        self._CONSUME = CONSUME_ENV
         PRODUCE_ENV = PRODUCE_ENV or PRODUCE
         if PRODUCE_ENV is None:
             raise ValueError("PRODUCE cannot be None")
+        self._PRODUCE = PRODUCE_ENV
         CLIENT_ID_ENV = CLIENT_ID_ENV or CLIENT_ID
         if CLIENT_ID_ENV is None:
             raise ValueError("CLIENT_ID cannot be None")
+        self._CLIENT_ID = CLIENT_ID_ENV
 
-    def _init_starter_params(self):
-        """Initialize all producers"""
+    def _init_options(self):
         options = {
             "kafka_host": KAFKA_HOST,
             "schema_registry": SCHEMA_REGISTRY,
@@ -139,7 +139,10 @@ class StarterService(ABC):
         }
         self._test_bed_options = TestBedOptions(options)
         self._test_bed_adapter = TestBedAdapter(TestBedOptions(options))
+        self.logger = LogManager(options=self._test_bed_options)
 
+    def _init_starter_params(self):
+        """Initialize all producers"""
         self._producers = {
             topic: ProducerManager(
                 options=self._test_bed_options,
