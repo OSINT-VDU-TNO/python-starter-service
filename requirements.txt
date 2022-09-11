@@ -1,6 +1,5 @@
 pykafka
 avro-python3
 requests
-feedparser
 environs
 osint-python-test-bed-adapter
