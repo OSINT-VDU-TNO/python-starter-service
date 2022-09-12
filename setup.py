@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 setuptools.setup(
     name="osint-python-starter-service",
-    version="1.0.3",
+    version="1.0.4",
     author="mindpetk",
     author_email="petkeviciusm@gmail.com",
     description="Python starter service",

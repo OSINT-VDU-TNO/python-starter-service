@@ -32,7 +32,6 @@ class StarterService(ABC):
         self._init_options()
         self._producers = {}
         self._consumers = {}
-        self._test_bed_options = None
 
         self.logger.info(
             f"""Initializing\nCLIENT_ID {CONSUME_ENV}\n\tPRODUCE {PRODUCE_ENV}\n\tCONSUME {CLIENT_ID_ENV}\n\t""")
@@ -62,7 +61,7 @@ class StarterService(ABC):
                     options=self._test_bed_options,
                     kafka_topic=topic,
                     handle_message=handle_message,
-                    run=run
+                    run=lambda: run
                 ).listen)
             )
 
