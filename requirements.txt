@@ -2,4 +2,8 @@ pykafka
 avro-python3
 requests
 environs
+fastapi
+uvicorn
+pydantic
+pydantic-avro
 osint-python-test-bed-adapter
