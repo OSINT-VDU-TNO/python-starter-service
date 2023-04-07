@@ -1,6 +1,6 @@
 import collections
 
-from schemas import SchemaRegistry
+from starter_service.schemas import SchemaRegistry
 
 _incoming_messages = collections.deque([], 20)
 _outgoing_messages = collections.deque([], 20)

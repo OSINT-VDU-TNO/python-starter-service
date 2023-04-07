@@ -8,10 +8,10 @@ from pydantic import ValidationError
 from starlette.responses import Response, JSONResponse
 from starlette.status import HTTP_200_OK
 
-from api import API
-from env import ENV
-from messages import MessageHistory
-from schemas import SchemaRegistry
+from starter_service.api import API
+from starter_service.env import ENV
+from starter_service.messages import MessageHistory
+from starter_service.schemas import SchemaRegistry
 
 _schema = SchemaRegistry()
 

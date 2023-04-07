@@ -8,8 +8,8 @@ os.environ['CONSUME'] = 'article_raw_en'
 os.environ['PRODUCE'] = 'metadata_item_key_en'
 os.environ['REST_API_ENABLED'] = 'True'
 
-from base_service import StarterService
-from api import API
+from starter_service.base_service import StarterService
+from starter_service.api import API
 
 
 class SingleRoute(StarterService):

@@ -9,9 +9,9 @@ from test_bed_adapter.kafka.consumer_manager import ConsumerManager
 from test_bed_adapter.kafka.log_manager import LogManager
 from test_bed_adapter.kafka.producer_manager import ProducerManager
 
-from api import API
-from env import ENV
-from schemas import SchemaRegistry
+from starter_service.api import API
+from starter_service.env import ENV
+from starter_service.schemas import SchemaRegistry
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 

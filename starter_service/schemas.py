@@ -4,7 +4,7 @@ import os
 from pydoc import locate
 from threading import Lock
 
-from avro_parser import avsc_to_pydantic
+from starter_service.avro_parser import avsc_to_pydantic
 
 _path = os.path.dirname(os.path.abspath(__file__))
 _logger = logging.getLogger(__name__)

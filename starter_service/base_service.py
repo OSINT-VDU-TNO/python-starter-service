@@ -2,8 +2,8 @@ import logging
 import traceback
 from abc import ABC, abstractmethod
 
-from api_server import APIServer
-from kafka_adapter import KafkaAdapter
+from starter_service.api_server import APIServer
+from starter_service.kafka_adapter import KafkaAdapter
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
