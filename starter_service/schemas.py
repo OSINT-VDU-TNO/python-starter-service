@@ -1,12 +1,13 @@
 import json
 import logging
 import os
+from pathlib import Path
 from pydoc import locate
 from threading import Lock
 
 from starter_service.avro_parser import avsc_to_pydantic
 
-_path = os.path.dirname(os.path.abspath(__file__))
+_path = str(Path().absolute())
 _logger = logging.getLogger(__name__)
 
 
@@ -156,6 +157,7 @@ class SchemaRegistry:
 
         if not os.path.exists(f"{_path}/schemas"):
             try:
+                os.makedirs(f"{_path}/schemas")
                 with open(f"{_path}/schemas/readme.txt", "w") as f:
                     f.write(
                         "Use this folder to provide AVRO schemas\n"
