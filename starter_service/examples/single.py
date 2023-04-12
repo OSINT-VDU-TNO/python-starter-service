@@ -3,7 +3,6 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-os.environ['CLIENT_ID'] = 'single'
 os.environ['CONSUME'] = 'article_raw_en'
 os.environ['PRODUCE'] = 'metadata_item_key_en'
 os.environ['REST_API_ENABLED'] = 'True'
@@ -13,6 +12,7 @@ from starter_service.api import API
 
 
 class SingleRoute(StarterService):
+    name = "single"
 
     def health(self):
         return "OK"

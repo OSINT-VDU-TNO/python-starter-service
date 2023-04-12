@@ -3,7 +3,6 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-os.environ['CLIENT_ID'] = 'multi'
 os.environ['CONSUME'] = 'article_raw_xx'
 os.environ['PRODUCE'] = 'article_raw_en,article_raw_lt,article_raw_nl'
 os.environ['REST_API_ENABLED'] = 'True'
@@ -13,6 +12,7 @@ from starter_service.api import API
 
 
 class MultiRoutes(StarterService):
+    name = "multi"
 
     def __init__(self):
         super().__init__()

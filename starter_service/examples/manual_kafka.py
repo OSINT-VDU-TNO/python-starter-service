@@ -3,7 +3,6 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-os.environ['CLIENT_ID'] = 'manual_kafka'
 os.environ['CONSUME'] = 'article_raw_xx'
 os.environ['PRODUCE'] = 'article_raw_en,article_raw_lt'
 os.environ['REST_API_ENABLED'] = 'True'
@@ -13,6 +12,7 @@ from starter_service.api import API
 
 
 class ManualKafka(StarterService):
+    name = "manual_kafka"
 
     def __init__(self):
         super().__init__()

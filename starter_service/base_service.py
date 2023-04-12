@@ -3,12 +3,15 @@ import traceback
 from abc import ABC, abstractmethod
 
 from starter_service.api_server import APIServer
+from starter_service.env import ENV
 from starter_service.kafka_adapter import KafkaAdapter
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
 
 class StarterService(ABC):
+    """Base class for all services."""
+    name = None  # Change this to the name of your service or use CLIENT_ID environment variable
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class StarterService(ABC):
 
     def _initialize(self):
         """Initialize services"""
+        ENV.CLIENT_ID = ENV.CLIENT_ID or self.name
 
         def _schema_callback():
             """Callback for Schema Registry, called when Schema Registry is ready or when an error occurs"""
