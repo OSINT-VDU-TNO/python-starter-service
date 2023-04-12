@@ -28,20 +28,18 @@ class Schema:
 
 
 class SchemaRegistry:
-    _instance = None
     _lock = Lock()
+    _instance = None
+    _logger = logging.getLogger(__name__)
+
+    _schemas = {}
+    _classes = {}
 
     def __new__(self):
         with self._lock:
             if self._instance is None:
                 self._instance = super().__new__(self)
         return self._instance
-
-    def __init__(self):
-        self._logger = logging.getLogger(__name__)
-        self._initialized = False
-        self._schemas = {}
-        self._classes = {}
 
     def get_schemas(self):
         return self._schemas
@@ -50,15 +48,12 @@ class SchemaRegistry:
         return {schema.topic: schema.class_name for class_name, schema in self._schemas.items()}
 
     def initialize(self):
-        if self._initialized:
-            return
         # create schema folder if not exists
         self._init_dir()
         # load schemas from folder
         self._load_local_schemas()
         # load classes from folder
         self._load_local_classes()
-        self._initialized = True
 
     def _load_local_schemas(self):
         # load avro schemas from local folder

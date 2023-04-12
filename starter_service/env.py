@@ -25,7 +25,7 @@ class ENV:
     STRING_BASED_KEYS = _env.bool('STRING_BASED_KEYS', True)
 
     # REST API
-    REST_API_ENABLED = _env.bool('REST_API_ENABLED', False)
+    REST_API_ENABLED = _env.bool('REST_API_ENABLED', True)
     REST_API_PORT = _env.int('REST_API_PORT', 8080)
     REST_API_HOST = _env('REST_API_HOST', '0.0.0.0')
     REST_LOG_MESSAGES = _env.bool('REST_LOG_MESSAGES', False)
