@@ -160,9 +160,7 @@ class SchemaRegistry:
                 os.makedirs(f"{_path}/schemas")
                 with open(f"{_path}/schemas/readme.txt", "w") as f:
                     f.write(
-                        "Use this folder to provide AVRO schemas\n"
-                        "Consume schemas are used to consume messages\n"
-                        "Produce schemas are used to produce messages"
+                        "Use this folder to provide AVRO schemas"
                     )
             except Exception as e:
                 self._logger.error(f"Error creating schema folder {e}")

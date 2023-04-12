@@ -12,11 +12,14 @@ First you need to provide ENV variables for the service to run.
 Main ENV variables:
 
 - `CLIENT_ID` - client id of the service
+- `REST_API_ENABLED` - enable/disable REST API
+
+## Kafka
+
 - `CONSUME` - comma separated list of topics to consume
 - `PRODUCE` - comma separated list of topics to produce
 - `KAFKA_HOST` - kafka host
 - `SCHEMA_REGISTRY` - schema registry host
-- `REST_API_ENABLED` - enable/disable REST API
 
 ## Usage
 
