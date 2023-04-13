@@ -17,7 +17,7 @@ class ENV:
 
     # KAFKA
     KAFKA_HOST = _env('KAFKA_HOST', '127.0.0.1:3501')
-    SCHEMA_REGISTRY = _env('SCHEMA_REGISTRY', 'http://localhost:8081')  # 3502')
+    SCHEMA_REGISTRY = _env('SCHEMA_REGISTRY', 'http://localhost:3502')
     PARTITIONER = _env("PARTITIONER", "random")
     MESSAGE_MAX_BYTES = _env.int('MESSAGE_MAX_BYTES', 1000000)
     HEARTBEAT_INTERVAL = _env.int('HEARTBEAT_INTERVAL', 10)

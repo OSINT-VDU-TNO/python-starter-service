@@ -18,10 +18,11 @@ _schema = SchemaRegistry()
 
 class APIServer:
 
-    def __init__(self, ready: callable = None, health: callable = None, kafka_status: str = None, base_service=None,
-                 **kwargs):
+    def __init__(self, name=None, ready: callable = None, health: callable = None, kafka_status: str = None,
+                 base_service=None, **kwargs):
+        self.name = name
         self._validated()
-        self.app = FastAPI()
+        self.app = FastAPI(title=self.name)
         self.router = APIRouter()
 
         @self.app.exception_handler(Exception)

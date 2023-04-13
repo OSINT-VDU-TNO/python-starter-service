@@ -15,6 +15,7 @@ class StarterService(ABC):
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self._name = None
         self._kafka = None
         self._api = None
         self._schemas = None
@@ -33,7 +34,7 @@ class StarterService(ABC):
 
     def _initialize(self):
         """Initialize services"""
-        ENV.CLIENT_ID = ENV.CLIENT_ID or self.name
+        self.name = ENV.CLIENT_ID = ENV.CLIENT_ID or self.name or self.__class__.__name__
 
         def _schema_callback():
             """Callback for Schema Registry, called when Schema Registry is ready or when an error occurs"""
@@ -65,7 +66,7 @@ class StarterService(ABC):
 
     def _register_api(self, _kafka_status):
         try:
-            self._api = APIServer(ready=self.ready, health=self.health, kafka_status=_kafka_status,
+            self._api = APIServer(name=self.name, ready=self.ready, health=self.health, kafka_status=_kafka_status,
                                   base_service=self)
             self._api.start()
             self.logger.info(f"REST API initialized.")
