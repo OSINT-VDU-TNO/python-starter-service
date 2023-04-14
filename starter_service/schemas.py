@@ -1,13 +1,12 @@
 import json
 import logging
-import os
 from pathlib import Path
 from pydoc import locate
 from threading import Lock
 
 from starter_service.avro_parser import avsc_to_pydantic
 
-_path = str(Path().absolute())
+_pathlib_path = Path().absolute()
 _logger = logging.getLogger(__name__)
 
 
@@ -58,21 +57,23 @@ class SchemaRegistry:
     def _load_local_schemas(self):
         # load avro schemas from local folder
         _schemas = []
-        for file in os.listdir(f"{_path}/schemas"):
-            if file.endswith(".avsc") or file.endswith("-value.avsc") or file.endswith("-key.avsc"):
+        schemas_dir = _pathlib_path / "schemas"
+        for file in schemas_dir.iterdir():
+            if file.suffix == ".avsc" or file.suffix == "-value.avsc" or file.suffix == "-key.avsc":
                 _schemas.append(file)
 
         if len(_schemas) == 0:
-            self._logger.warning(f"No schemas found in {_path}/schemas")
+            self._logger.warning(f"No schemas found in {_pathlib_path.absolute()}")
             return
 
         for file in _schemas:
-            self._load_schema_from_file(file)
+            self._load_schema_from_file(file.name)
 
     def _load_local_classes(self):
-        for file in os.listdir(f"{_path}/classes"):
-            if file.endswith(".py") and not file.startswith("__"):
-                topic = file.replace(".py", "")
+        classes_dir = _pathlib_path / "classes"
+        for file in classes_dir.iterdir():
+            if file.suffix == ".py" and file.name != "__init__.py":
+                topic = file.name.replace(".py", "")
                 if topic in self._schemas:
                     continue
                 self._logger.info(f"Loading class {topic} from file {file}")
@@ -82,7 +83,8 @@ class SchemaRegistry:
 
     def _read_main_class_from_file(self, file):
         main_class = None
-        with open(f"{_path}/classes/{file}", "r") as f:
+        file_path = _pathlib_path / "classes" / file
+        with open(file_path, "r") as f:
             for line in f.readlines():
                 if line.startswith("main_class"):
                     main_class = line.split(" ")[2].strip()
@@ -98,7 +100,8 @@ class SchemaRegistry:
         """
         self._logger.info(f"Registering schema for topic {topic}")
         filename, main_class, python_classes = self._avro_to_file(schema)
-        full_path = os.path.join(_path, "classes", f'{topic}.py')
+
+        full_path = _pathlib_path / "classes" / f'{topic}.py'
         with open(full_path, "w") as f:
             f.write(python_classes)
         schema = Schema(topic, filename, main_class, self._load_class_from_file(f'{topic}.py', main_class), full_path)
@@ -125,7 +128,8 @@ class SchemaRegistry:
     def _load_schema_from_file(self, filename):
         try:
             self._logger.info(f"Loading schema {filename}")
-            with open(f"{_path}/schemas/{filename}", "r") as f:
+            filepath = _pathlib_path / "schemas" / filename
+            with open(filepath, "r") as f:
                 self.register_schema(f.read(), self._filename_to_topic(filename))
         except Exception as e:
             self._logger.error(f"Error loading schema {filename}: {e}")
@@ -139,24 +143,24 @@ class SchemaRegistry:
             return filename[:-5].lower()
 
     def _init_dir(self):
-        if not os.path.exists(f"{_path}/classes"):
+        classes_dir = _pathlib_path / "classes"
+        if not classes_dir.exists():
             try:
-                os.makedirs(f"{_path}/classes")
-                with open(f"{_path}/classes/__init__.py", "w") as f:
-                    f.write("")
-                with open(f"{_path}/classes/readme.txt", "w") as f:
-                    f.write("This folder contains all the generated classes from the schemas")
+                classes_dir.mkdir()
+                init_file = classes_dir / "__init__.py"
+                init_file.touch()
+                readme_file = classes_dir / "readme.txt"
+                readme_file.write_text("This folder contains all the generated classes from the schemas")
             except Exception as e:
                 self._logger.error(f"Error creating classes folder {e}")
                 raise e
 
-        if not os.path.exists(f"{_path}/schemas"):
+        schemas_dir = _pathlib_path / "schemas"
+        if not schemas_dir.exists():
             try:
-                os.makedirs(f"{_path}/schemas")
-                with open(f"{_path}/schemas/readme.txt", "w") as f:
-                    f.write(
-                        "Use this folder to provide AVRO schemas"
-                    )
+                schemas_dir.mkdir()
+                readme_file = schemas_dir / "readme.txt"
+                readme_file.write_text("Use this folder to provide AVRO schemas")
             except Exception as e:
                 self._logger.error(f"Error creating schema folder {e}")
                 raise e
