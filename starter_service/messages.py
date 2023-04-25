@@ -1,10 +1,7 @@
 import collections
 
-from starter_service.schemas import SchemaRegistry
-
 _incoming_messages = collections.deque([], 20)
 _outgoing_messages = collections.deque([], 20)
-_schema = SchemaRegistry()
 
 # TODO: Add a message history class to store the last 20 messages
 class MessageHistory:

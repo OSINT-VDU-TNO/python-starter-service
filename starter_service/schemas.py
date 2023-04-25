@@ -2,11 +2,9 @@ import json
 import logging
 from pathlib import Path
 from pydoc import locate
-from threading import Lock
 
 from starter_service.avro_parser import avsc_to_pydantic
 
-_pathlib_path = Path().absolute()
 _logger = logging.getLogger(__name__)
 
 
@@ -27,70 +25,83 @@ class Schema:
 
 
 class SchemaRegistry:
-    _lock = Lock()
-    _instance = None
     _logger = logging.getLogger(__name__)
-
+    _pathlib_path = None
     _schemas = {}
-    _classes = {}
 
-    def __new__(self):
-        with self._lock:
-            if self._instance is None:
-                self._instance = super().__new__(self)
-        return self._instance
+    @classmethod
+    def get_schemas(cls):
+        return cls._schemas
 
-    def get_schemas(self):
-        return self._schemas
+    @classmethod
+    def get_schemas_dict(cls):
+        return {schema.topic: schema.class_name for class_name, schema in cls._schemas.items()}
 
-    def get_schemas_dict(self):
-        return {schema.topic: schema.class_name for class_name, schema in self._schemas.items()}
-
-    def initialize(self):
+    @classmethod
+    def initialize(cls, path=None):
+        cls._pathlib_path = Path(path) if path else Path().absolute()
+        cls._logger.info(f"Initializing SchemaRegistry {cls._pathlib_path}")
         # create schema folder if not exists
-        self._init_dir()
+        cls._init_dir()
         # load schemas from folder
-        self._load_local_schemas()
+        cls._load_local_schemas()
         # load classes from folder
-        self._load_local_classes()
+        cls._load_local_classes()
 
-    def _load_local_schemas(self):
+    @classmethod
+    def _load_local_schemas(cls):
         # load avro schemas from local folder
         _schemas = []
-        schemas_dir = _pathlib_path / "schemas"
+        try:
+            if not cls._pathlib_path.exists():
+                cls._pathlib_path.mkdir()
+        except Exception as e:
+            cls._logger.error(f"Error creating schema folder: {e}")
+            return
+
+        schemas_dir = cls._pathlib_path / "schemas"
         for file in schemas_dir.iterdir():
             if file.suffix == ".avsc" or file.suffix == "-value.avsc" or file.suffix == "-key.avsc":
                 _schemas.append(file)
 
         if len(_schemas) == 0:
-            self._logger.warning(f"No schemas found in {_pathlib_path.absolute()}")
+            cls._logger.warning(f"No schemas found in {cls._pathlib_path.absolute()}")
             return
 
         for file in _schemas:
-            self._load_schema_from_file(file.name)
+            cls._load_schema_from_file(file.name)
 
-    def _load_local_classes(self):
-        classes_dir = _pathlib_path / "classes"
+    @classmethod
+    def _load_local_classes(cls):
+        classes_dir = cls._pathlib_path / "classes"
         for file in classes_dir.iterdir():
             if file.suffix == ".py" and file.name != "__init__.py":
                 topic = file.name.replace(".py", "")
-                if topic in self._schemas:
+                if topic in cls._schemas:
                     continue
-                self._logger.info(f"Loading class {topic} from file {file}")
-                main_class = self._read_main_class_from_file(file)
-                schema = Schema(topic, file, main_class, self._load_class_from_file(f'{topic}.py', main_class), file)
-                self._schemas[topic] = schema
+                cls._logger.info(f"Loading class {topic} from file {file}")
+                main_class = cls._read_main_class_from_file(file.name)
+                schema = Schema(topic, file, main_class, cls._load_class_from_file(f'{topic}.py', main_class), file)
+                cls._schemas[topic] = schema
 
-    def _read_main_class_from_file(self, file):
+    @classmethod
+    def _read_main_class_from_file(cls, file):
         main_class = None
-        file_path = _pathlib_path / "classes" / file
+        _logger.info(f"Reading main class from file {file}")
+        file_path = cls._pathlib_path / "classes" / file
+        if not file_path.exists():
+            _logger.error(f"File {file_path} does not exist")
+            return None
         with open(file_path, "r") as f:
             for line in f.readlines():
                 if line.startswith("main_class"):
                     main_class = line.split(" ")[2].strip()
+                    break
+            _logger.info(f"Main class is {main_class}")
         return main_class
 
-    def register_schema(self, schema: [str, dict], topic: str):
+    @classmethod
+    def register_schema(cls, schema: [str, dict], topic: str):
         """
         Register a schema from a string or dict
         :param schema: AVRO string schema
@@ -98,20 +109,27 @@ class SchemaRegistry:
         :param _type: SchemaType Enum (consume or produce)
         :return:
         """
-        self._logger.info(f"Registering schema for topic {topic}")
-        filename, main_class, python_classes = self._avro_to_file(schema)
+        cls._logger.info(f"Registering schema for topic {topic}")
+        filename, main_class, python_classes = cls._avro_to_file(schema)
 
-        full_path = _pathlib_path / "classes" / f'{topic}.py'
+        full_path = cls._pathlib_path / "classes" / f'{topic}.py'
+        cls._logger.info(f"Writing schema to file {full_path}, path {cls._pathlib_path}")
         with open(full_path, "w") as f:
             f.write(python_classes)
-        schema = Schema(topic, filename, main_class, self._load_class_from_file(f'{topic}.py', main_class), full_path)
-        self._schemas[topic] = schema
+        schema = Schema(topic, filename, main_class, cls._load_class_from_file(f'{topic}.py', main_class), full_path)
+        _logger.info(f"Registering schema {schema.__dict__} for topic {topic}")
+        cls._schemas[topic] = schema
 
-    def _load_class_from_file(self, filename, class_name):
-        self._logger.info(f"Loading class from file {filename} with class {class_name}")
-        return locate(f"classes.{filename[:-3]}.{class_name}")
+    @classmethod
+    def _load_class_from_file(cls, filename, class_name):
+        absolute = str(Path().absolute())
+        path = str(cls._pathlib_path).replace(absolute, "").replace("/", ".")
+        cls._logger.info(
+            f"Loading class from file {filename} with class {class_name}, path {path}.classes.{filename[:-3]}.{class_name}")
+        return locate(f"{path}.classes.{filename[:-3]}.{class_name}", True)
 
-    def _avro_to_file(self, schema: [str, dict]) -> [str, str, str]:
+    @classmethod
+    def _avro_to_file(cls, schema: [str, dict]) -> [str, str, str]:
         """
         :param schema: AVRO schema as string or dict
         :return: filename, main_class, python_classes
@@ -125,16 +143,18 @@ class SchemaRegistry:
         filename = f"{class_name.lower()}.py"
         return filename, main_class, python_classes
 
-    def _load_schema_from_file(self, filename):
+    @classmethod
+    def _load_schema_from_file(cls, filename):
         try:
-            self._logger.info(f"Loading schema {filename}")
-            filepath = _pathlib_path / "schemas" / filename
+            cls._logger.info(f"Loading schema {filename}")
+            filepath = cls._pathlib_path / "schemas" / filename
             with open(filepath, "r") as f:
-                self.register_schema(f.read(), self._filename_to_topic(filename))
+                cls.register_schema(f.read(), cls._filename_to_topic(filename))
         except Exception as e:
-            self._logger.error(f"Error loading schema {filename}: {e}")
+            cls._logger.error(f"Error loading schema {filename}: {e}")
 
-    def _filename_to_topic(self, filename):
+    @classmethod
+    def _filename_to_topic(cls, filename):
         if filename.endswith("-value.avsc"):
             return filename[:-11].lower()
         if filename.endswith("-key.avsc"):
@@ -142,8 +162,15 @@ class SchemaRegistry:
         if filename.endswith(".avsc"):
             return filename[:-5].lower()
 
-    def _init_dir(self):
-        classes_dir = _pathlib_path / "classes"
+    @classmethod
+    def _init_dir(cls):
+        try:
+            if not cls._pathlib_path.exists():
+                cls._pathlib_path.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            cls._logger.error(f"Error creating schema folder: {e}")
+            return
+        classes_dir = cls._pathlib_path / "classes"
         if not classes_dir.exists():
             try:
                 classes_dir.mkdir()
@@ -152,24 +179,23 @@ class SchemaRegistry:
                 readme_file = classes_dir / "readme.txt"
                 readme_file.write_text("This folder contains all the generated classes from the schemas")
             except Exception as e:
-                self._logger.error(f"Error creating classes folder {e}")
+                cls._logger.error(f"Error creating classes folder {e}")
                 raise e
 
-        schemas_dir = _pathlib_path / "schemas"
+        schemas_dir = cls._pathlib_path / "schemas"
         if not schemas_dir.exists():
             try:
                 schemas_dir.mkdir()
                 readme_file = schemas_dir / "readme.txt"
                 readme_file.write_text("Use this folder to provide AVRO schemas")
             except Exception as e:
-                self._logger.error(f"Error creating schema folder {e}")
+                cls._logger.error(f"Error creating schema folder {e}")
                 raise e
 
-    def get_schema(self, topic) -> object or dict:
-        with self._lock:
-            if not topic or topic not in self._schemas:
-                return dict
-            return self._schemas[topic].class_obj
-
-
-SchemaRegistry().initialize()
+    @classmethod
+    def get_schema(cls, topic) -> object or dict:
+        if not topic:
+            return dict
+        if topic not in cls._schemas.keys():
+            return dict
+        return cls._schemas[topic].class_obj

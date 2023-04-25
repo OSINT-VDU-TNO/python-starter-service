@@ -1,7 +1,4 @@
 import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['CONSUME'] = 'article_raw_xx'
 os.environ['PRODUCE'] = 'article_raw_en,article_raw_lt,article_raw_nl'

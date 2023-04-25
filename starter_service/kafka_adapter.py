@@ -15,8 +15,6 @@ from starter_service.schemas import SchemaRegistry
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
-_schema = SchemaRegistry()
-
 
 class KafkaAdapter(Thread):
     """Kafka adapter"""
@@ -58,7 +56,7 @@ class KafkaAdapter(Thread):
                 run=lambda: run
             )
             self.logger.info(f"Registering schema from kafka for {topic}")
-            _schema.register_schema(_consumer.schema_str, topic)
+            SchemaRegistry.register_schema(_consumer.schema_str, topic)
             self.logger.info(f"Initializing listener for topic {topic}")
             listener_threads.append(threading.Thread(
                 target=_consumer.listen)
@@ -94,10 +92,8 @@ class KafkaAdapter(Thread):
 
     def send_message(self, message, topics=None, testing=False):
         """Send message to kafka topic"""
-        # _msg_uuid = kwargs.get('uuid')
         if testing:
             self.logger.info(f"Sending test message to {topics}\n{message}")
-            # MessageHistory.add_outgoing_message(_msg_uuid, message)
             return
 
         if topics:
@@ -108,15 +104,11 @@ class KafkaAdapter(Thread):
                 if topic in self._producers:
                     if ENV.DEBUG:
                         self.logger.info(f"Sending message to {topic}\n{message}")
-                    # if ENV.REST_API_ENABLED and ENV.REST_LOG_MESSAGES:
-                    #     MessageHistory.add_outgoing_message(_msg_uuid, message)
                     self._producers[topic].send_messages(messages=[message])
         else:
             for topic, producer in self._producers.items():
                 if ENV.DEBUG:
                     self.logger.info(f"Sending message to {topic}\n{message}")
-                # if ENV.REST_API_ENABLED and ENV.REST_LOG_MESSAGES:
-                #     MessageHistory.add_outgoing_message(_msg_uuid, message)
                 producer.send_messages(messages=[message])
 
     def _validate_params(self):
@@ -135,7 +127,7 @@ class KafkaAdapter(Thread):
                 kafka_topic=topic
             )
             self._producers[topic] = _producer
-            _schema.register_schema(_producer.schema_str, topic)
+            SchemaRegistry.register_schema(_producer.schema_str, topic)
 
     def _init_options(self):
         _options = {
@@ -159,10 +151,6 @@ class KafkaAdapter(Thread):
         self.logger.info(f"Received message for topic {topic}")
         if ENV.DEBUG:
             self.logger.info(f"Message {message}")
-        # message_uuid = uuid.uuid4().hex
-        # if ENV.REST_API_ENABLED and ENV.REST_LOG_MESSAGES:
-        # MessageHistory.add_incoming_message(message_uuid, message)
-        # methods = get_function_by_consummer(topic)
 
         funcs = API.get_func_by_consumer(topic)
         for consumer, producer, doc, func, _type in funcs:

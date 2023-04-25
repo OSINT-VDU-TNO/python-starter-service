@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from starter_service.api_server import APIServer
 from starter_service.env import ENV
 from starter_service.kafka_adapter import KafkaAdapter
+from starter_service.schemas import SchemaRegistry
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
@@ -12,15 +13,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name
 class StarterService(ABC):
     """Base class for all services."""
     name = None  # Change this to the name of your service or use CLIENT_ID environment variable
+    path = None  # Path for local schemas, use SCHEMA_PATH environment variable
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self._name = None
         self._kafka = None
         self._api = None
         self._schemas = None
         self._functions = None
         self._initialize()
+        self._schema_registry = None
 
     @abstractmethod
     def ready(self) -> bool:
@@ -36,15 +38,19 @@ class StarterService(ABC):
         """Initialize services"""
         self.name = ENV.CLIENT_ID = ENV.CLIENT_ID or self.name or self.__class__.__name__
 
-        def _schema_callback():
-            """Callback for Schema Registry, called when Schema Registry is ready or when an error occurs"""
-            self.logger.info("Schema callback")
-            self._register_api(_kafka_status)
+        """Initialize Schema Registry"""
+        SchemaRegistry.initialize(self.path)
+
+        def _api_callback():
+            """Callback for API Server, called when API Server is ready or when an error occurs"""
+            self.logger.info("API callback")
+            self.api_callback()
 
         def _kafka_callback():
             """Callback for Kafka Adapter, called when Kafka Adapter is ready or when an error occurs"""
             self.logger.info("Kafka callback")
-            self._register_schemas(_schema_callback)
+            self.kafka_callback()
+            self._register_api(_kafka_status, _api_callback)
 
         """Initialize services"""
         _kafka_status = "ok"
@@ -58,16 +64,10 @@ class StarterService(ABC):
             _kafka_callback()
             self.logger.error(f'Error initializing kafka: {e}')
 
-    def _register_schemas(self, callback):
-        try:
-            callback()
-        except Exception as e:
-            self.logger.error(f'Error initializing schema registry: {e}')
-
-    def _register_api(self, _kafka_status):
+    def _register_api(self, _kafka_status, callback):
         try:
             self._api = APIServer(name=self.name, ready=self.ready, health=self.health, kafka_status=_kafka_status,
-                                  base_service=self)
+                                  base_service=self, callback=callback)
             self._api.start()
             self.logger.info(f"REST API initialized.")
         except Exception as e:
@@ -78,8 +78,16 @@ class StarterService(ABC):
             self.logger.error('No services initialized. Shutting down.')
             exit(1)
 
-    def send_message(self, message, topic):
+    def send_message(self, message, topic, testing=True):
         """Send message to Kafka"""
         if self._kafka is None:
             raise Exception("Kafka is not initialized")
-        self._kafka.send_message(message, topics=topic, testing=True)
+        self._kafka.send_message(message, topics=topic, testing=testing)
+
+    def kafka_callback(self):
+        """Override this method to callback after service is initialized"""
+        pass
+
+    def api_callback(self):
+        """Override this method to callback after service is initialized"""
+        pass

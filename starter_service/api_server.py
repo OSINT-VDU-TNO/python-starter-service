@@ -13,17 +13,16 @@ from starter_service.env import ENV
 from starter_service.messages import MessageHistory
 from starter_service.schemas import SchemaRegistry
 
-_schema = SchemaRegistry()
-
 
 class APIServer:
 
     def __init__(self, name=None, ready: callable = None, health: callable = None, kafka_status: str = None,
-                 base_service=None, **kwargs):
+                 base_service=None, callback=None, **kwargs):
         self.name = name
         self._validated()
         self.app = FastAPI(title=self.name)
         self.router = APIRouter()
+        self.callback = callback
 
         @self.app.exception_handler(Exception)
         async def validation_exception_handler(request, err):
@@ -79,7 +78,7 @@ class APIServer:
                         "produce": ENV.PRODUCE
                     }
                 },
-                "schemas:": _schema.get_schemas_dict(),
+                "schemas:": SchemaRegistry.get_schemas_dict(),
                 "methods": API.functions
             }
 
@@ -111,6 +110,7 @@ class APIServer:
         self._running = True
         self._thread = threading.Thread(target=self._run)
         self._thread.start()
+        self.callback()
 
     def stop(self):
         self._logger.info("Stopping API server")
@@ -134,9 +134,10 @@ class APIServer:
 
     def _register_route(self, consumer, producer, doc, func, _type):
         """Register a route"""
-        self._logger.info(f"Registering route {consumer} -> {producer} ({doc})")
-        consumer_class = _schema.get_schema(consumer)
-        producer_class = _schema.get_schema(producer)
+        consumer_class = SchemaRegistry.get_schema(consumer)
+        producer_class = SchemaRegistry.get_schema(producer)
+
+        self._logger.info(f"Registering route {consumer}:{consumer_class} -> {producer}:{producer_class} ({doc})")
         func_wrapper = lambda message: func(self._base_service, message) \
             if isinstance(message, str) else func(self._base_service, jsonable_encoder(message))
         path = f"/api{f'/{consumer}' if consumer else ''}{f'/{producer}' if producer else ''}"

@@ -1,24 +1,29 @@
 import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['CONSUME'] = 'article_raw_en'
 os.environ['PRODUCE'] = 'metadata_item_key_en'
-os.environ['REST_API_ENABLED'] = 'True'
 
 from starter_service.base_service import StarterService
 from starter_service.api import API
 
 
 class SingleRoute(StarterService):
-    name = "single"
+    name = "single_route"
+    path = "app"
 
     def health(self):
         return "OK"
 
     def ready(self):
         return True
+
+    def kafka_callback(self):
+        """Kafka callback"""
+        self.logger.info("Kafka callback")
+
+    def api_callback(self):
+        """API callback"""
+        self.logger.info("API callback")
 
     @API.post(consumer="article_raw_en", producer="metadata_item_key_en", doc="Process raw article and return metadata")
     def handle_message(self, message: dict):

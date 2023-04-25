@@ -12,7 +12,7 @@ First you need to provide ENV variables for the service to run.
 Main ENV variables:
 
 - `CLIENT_ID` - client id of the service
-- `REST_API_ENABLED` - enable/disable REST API
+- `REST_API_ENABLED` - enable/disable REST API (default: `true`)
 
 ## Kafka
 
