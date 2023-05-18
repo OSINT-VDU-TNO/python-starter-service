@@ -1,6 +1,11 @@
 import json
 from typing import Optional, Union
 
+_reserved_keywords = ["def", "class", "from", "to", "import", "as", "pass", "return", "raise", "try", "except",
+                      "finally", "while", "for", "in", "continue", "break", "if", "elif", "else", "assert", "del",
+                      "global", "nonlocal", "lambda", "with", "yield", "async", "await", "True", "False", "None", "and",
+                      "or", "not", "is", "in"]
+
 
 def avsc_to_pydantic(schema: dict) -> [str, str]:
     """Generate python code of pydantic of given Avro Schema"""
@@ -92,6 +97,8 @@ def avsc_to_pydantic(schema: dict) -> [str, str]:
             n = field["name"]
             t = get_python_type(field["type"])
             default = field.get("default")
+            if n in _reserved_keywords:
+                n = f"{n}_"
             if "default" not in field:
                 current += f"    {n}: {t}\n"
             elif isinstance(default, (bool, type(None))):
@@ -106,6 +113,7 @@ def avsc_to_pydantic(schema: dict) -> [str, str]:
     record_type_to_pydantic(schema)
 
     file_content = """
+import json
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
@@ -114,9 +122,17 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-
 """
     file_content += "\n\n".join(classes.values())
+    file_content += """
+    def dict(self, *args, **kwargs):
+            return {
+                k[:-1] if k.endswith("_") else k: v for k, v in self.__dict__.items()
+            }
+
+    def json(self, *args, **kwargs):
+            return json.dumps(self.dict(), *args, **kwargs)
+    """
     file_content += f"\n\nmain_class = {main_class}\n"
     return file_content, main_class
 
