@@ -73,6 +73,8 @@ class APIServer:
                     "message_max_bytes": ENV.MESSAGE_MAX_BYTES,
                     "heartbeat_interval": ENV.HEARTBEAT_INTERVAL,
                     "offset_type": ENV.OFFSET_TYPE,
+                    "ignore_timeout": ENV.IGNORE_TIMEOUT,
+                    "use_latest": ENV.USE_LATEST,
                     "topics": {
                         "consume": ENV.CONSUME,
                         "produce": ENV.PRODUCE
@@ -106,8 +108,8 @@ class APIServer:
     def start(self):
         """Start the server"""
         self._logger.info("Starting API server")
-        self._uptime = datetime.datetime.now().isoformat()
         self._running = True
+        self._uptime = datetime.datetime.now().isoformat()
         self._thread = threading.Thread(target=self._run)
         self._thread.start()
         self.callback()

@@ -5,6 +5,10 @@ from starter_service.env import ENV
 ENV.SET("CONSUME", ["article_raw_xx"])
 ENV.SET("PRODUCE", ["article_raw_en", "article_raw_lt", "metadata_item_update"])
 
+ENV.SET("OFFSET_TYPE", 'earliest')
+ENV.SET("IGNORE_TIMEOUT", 3)
+ENV.SET("USE_LATEST", True)
+
 
 class ManualKafka(StarterService):
     path = "app"
@@ -20,7 +24,6 @@ class ManualKafka(StarterService):
 
     def kafka_callback(self):
         """Kafka callback"""
-        self.logger.info("Kafka callback")
         # When testing is True, the message is not sent to Kafka, but is printed to the console
         self.send_message({
             "articleId": "string",

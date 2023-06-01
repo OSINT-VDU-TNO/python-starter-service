@@ -1,10 +1,9 @@
-import os
-
-os.environ['CONSUME'] = 'article_raw_en'
-os.environ['PRODUCE'] = 'metadata_item_key_en'
-
-from starter_service.base_service import StarterService
 from starter_service.api import API
+from starter_service.base_service import StarterService
+from starter_service.env import ENV
+
+ENV.SET("CONSUME", ["article_raw_en"])
+ENV.SET("PRODUCE", ["metadata_item_key_en"])
 
 
 class SingleRoute(StarterService):
@@ -25,7 +24,7 @@ class SingleRoute(StarterService):
         """API callback"""
         self.logger.info("API callback")
 
-    @API.post(consumer="article_raw_en", producer="metadata_item_key_en", doc="Process raw article and return metadata")
+    @API.post(consumer=ENV.CONSUME[0], producer=ENV.PRODUCE[0], doc="Process raw article and return metadata")
     def handle_message(self, message: dict):
         return {
             "articleId": message['id'],

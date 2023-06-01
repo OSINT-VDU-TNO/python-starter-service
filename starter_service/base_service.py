@@ -1,6 +1,7 @@
 import logging
 import traceback
 from abc import ABC, abstractmethod
+from threading import Thread
 
 from starter_service.api_server import APIServer
 from starter_service.env import ENV
@@ -49,7 +50,8 @@ class StarterService(ABC):
         def _kafka_callback():
             """Callback for Kafka Adapter, called when Kafka Adapter is ready or when an error occurs"""
             self.logger.info("Kafka callback")
-            self.kafka_callback()
+            if self.kafka_callback:
+                Thread(target=self.kafka_callback).start()
             self._register_api(_kafka_status, _api_callback)
 
         """Initialize services"""

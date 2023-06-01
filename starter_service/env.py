@@ -1,6 +1,7 @@
 from environs import Env
 
 _env = Env()
+_supported_types = [str, int, float, bool]
 
 
 class ENV:
@@ -21,8 +22,11 @@ class ENV:
     PARTITIONER = _env("PARTITIONER", "random")
     MESSAGE_MAX_BYTES = _env.int('MESSAGE_MAX_BYTES', 1000000)
     HEARTBEAT_INTERVAL = _env.int('HEARTBEAT_INTERVAL', 10)
-    OFFSET_TYPE = _env('OFFSET_TYPE', 'earliest')
     STRING_BASED_KEYS = _env.bool('STRING_BASED_KEYS', True)
+
+    OFFSET_TYPE = _env('OFFSET_TYPE', 'latest')
+    IGNORE_TIMEOUT = _env("IGNORE_TIMEOUT", None)
+    USE_LATEST = _env.bool("USE_LATEST", False)
 
     # REST API
     REST_API_ENABLED = _env.bool('REST_API_ENABLED', True)
@@ -32,6 +36,24 @@ class ENV:
 
     # OTHER
     LOCAL_SCHEMA_REGISTRY_ENABLED = _env.bool('LOCAL_SCHEMA_REGISTRY_ENABLED', True)
+
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    @classmethod
+    def SET(cls, name, value, type=None):
+        if type and type in _supported_types:
+            _val = type(_env(name, value))
+        else:
+            _val = _env(name, value)
+        setattr(cls, name, _val)
+
+    @classmethod
+    def GET(cls, name, default=None, type=None):
+        if not hasattr(cls, name):
+            cls.SET(name, default, type)
+        return getattr(cls, name)
 
     def update(self, **kwargs):
         for key, value in kwargs.items():

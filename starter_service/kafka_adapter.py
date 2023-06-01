@@ -138,13 +138,14 @@ class KafkaAdapter(Thread):
             "message_max_bytes": ENV.MESSAGE_MAX_BYTES,
             "offset_type": ENV.OFFSET_TYPE,
             "heartbeat_interval": ENV.HEARTBEAT_INTERVAL,
-            "string_based_keys": ENV.STRING_BASED_KEYS
+            "string_based_keys": ENV.STRING_BASED_KEYS,
+            "ignore_timeout": ENV.IGNORE_TIMEOUT,
+            "use_latest": ENV.USE_LATEST
         }
         self._test_bed_options = TestBedOptions(_options)
         self._test_bed_adapter = TestBedAdapter(self._test_bed_options)
         self.logger = LogManager(options=self._test_bed_options)
-        self.logger.info(f"Initializing kafka: ClientId[{ENV.CLIENT_ID}],"
-                         f" Consume{ENV.CONSUME}, Produce{ENV.PRODUCE}")
+        self.logger.info(f"Initializing kafka: ClientId[{ENV.CLIENT_ID}], Consume{ENV.CONSUME}, Produce{ENV.PRODUCE}")
         self.logger.info(f"Connected to kafka: {_options}")
 
     def _handle_message(self, message, topic):
@@ -154,7 +155,7 @@ class KafkaAdapter(Thread):
 
         funcs = API.get_func_by_consumer(topic)
         for consumer, producer, doc, func, _type in funcs:
-            self.logger.info(f'Found function form {consumer}, to {producer}')
+            # self.logger.info(f'Found function form {consumer}, to {producer}')
             try:
                 response = func(self._base_service, message)
                 if producer and response:
