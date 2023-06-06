@@ -4,7 +4,7 @@ from typing import Optional, Union
 _reserved_keywords = ["def", "class", "from", "to", "import", "as", "pass", "return", "raise", "try", "except",
                       "finally", "while", "for", "in", "continue", "break", "if", "elif", "else", "assert", "del",
                       "global", "nonlocal", "lambda", "with", "yield", "async", "await", "True", "False", "None", "and",
-                      "or", "not", "is", "in"]
+                      "or", "not", "is", "in", "schema"]
 
 
 def avsc_to_pydantic(schema: dict) -> [str, str]:
@@ -32,12 +32,14 @@ def avsc_to_pydantic(schema: dict) -> [str, str]:
                 py_type = "bool"
             elif t == "double" or t == "float":
                 py_type = "float"
+            elif t == "null" or t == "None":
+                py_type = "None"
             elif t in classes:
                 py_type = t
             else:
                 raise NotImplementedError(f"Type {t} not supported yet")
         elif isinstance(t, list):
-            if "null" in t:
+            if "null" in t or "None" in t or None in t:
                 optional = True
             if len(t) > 2 or (not optional and len(t) > 1):
                 union = True
@@ -45,7 +47,8 @@ def avsc_to_pydantic(schema: dict) -> [str, str]:
                 # raise NotImplementedError("Only a single type ia supported yet")
             else:
                 c = t.copy()
-                c.remove("null")
+                if "null" in c:
+                    c.remove("null")
                 py_type = get_python_type(c[0])
         elif t.get("logicalType") == "uuid":
             py_type = "UUID"
@@ -82,7 +85,10 @@ def avsc_to_pydantic(schema: dict) -> [str, str]:
                 f"please report this at https://github.com/godatadriven/pydantic-avro/issues"
             )
         if optional:
-            return f"Optional[{py_type}]"
+            if isinstance(py_type, list):
+                return f"Optional[Union[{', '.join(py_type)}]]"
+            else:
+                return f"Optional[{py_type}]"
         elif union:
             return f"Union[{', '.join(py_type)}]"
         else:

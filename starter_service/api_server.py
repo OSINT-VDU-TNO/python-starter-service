@@ -80,6 +80,8 @@ class APIServer:
                         "produce": ENV.PRODUCE
                     }
                 },
+                "environment": {key: value for key, value in ENV.__dict__.items() if
+                                not key.startswith("_") and key not in ["SET", "GET", "update"]},
                 "schemas:": SchemaRegistry.get_schemas_dict(),
                 "methods": API.functions
             }
