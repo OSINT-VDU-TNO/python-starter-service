@@ -2,8 +2,8 @@ from starter_service.api import API
 from starter_service.base_service import StarterService
 from starter_service.env import ENV
 
-ENV.SET("CONSUME", ["article_raw_xx"])
-ENV.SET("PRODUCE", ["article_raw_en", "article_raw_lt", "metadata_item_update"])
+ENV.SET("CONSUME", "article_raw_xx")
+ENV.SET("PRODUCE", "article_raw_en,article_raw_lt,metadata_item_update")
 
 
 class ManualKafka(StarterService):
@@ -30,7 +30,7 @@ class ManualKafka(StarterService):
             testing=False  # Default is False, when deploying to production, set to False
         )
 
-    @API.post(consumer=ENV.CONSUME[0], doc="Process article_raw_xx and send to article_raw_en, article_raw_lt")
+    @API.post(consumer=ENV.CONSUME, doc="Process article_raw_xx and send to article_raw_en, article_raw_lt")
     def handle_message(self, message: dict):
         message['language'] = 'en'
         self.send_message(message, 'article_raw_en')

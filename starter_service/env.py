@@ -12,8 +12,8 @@ class ENV:
     DEBUG = _env.bool("DEBUG", False)
 
     # TOPICS
-    CONSUME = [c.strip() for c in _env('CONSUME', '').split(',') if c.strip()]
-    PRODUCE = [p.strip() for p in _env('PRODUCE', '').split(',') if p.strip()]
+    CONSUME = _env('CONSUME', '')
+    PRODUCE = _env('PRODUCE', '')
     CLIENT_ID = _env('CLIENT_ID', None)
 
     # KAFKA

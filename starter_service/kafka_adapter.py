@@ -48,7 +48,11 @@ class KafkaAdapter(Thread):
         run = True
 
         # Create threads for each consume topic
-        for topic in ENV.CONSUME:
+        for topic in ENV.CONSUME.split(','):
+            topic = topic.strip()
+            if not topic:
+                self.logger.warning("Empty topic, skipping")
+                continue
             _consumer = ConsumerManager(
                 options=self._test_bed_options,
                 kafka_topic=topic,
@@ -120,7 +124,11 @@ class KafkaAdapter(Thread):
 
     def _init_producers(self):
         """Initialize all producers"""
-        for topic in ENV.PRODUCE:
+        for topic in ENV.PRODUCE.split(','):
+            topic = topic.strip()
+            if not topic:
+                self.logger.warning("Empty topic, skipping")
+                continue
             self.logger.info(f"Initializing producer for topic {topic}")
             _producer = ProducerManager(
                 options=self._test_bed_options,
@@ -145,7 +153,8 @@ class KafkaAdapter(Thread):
         self._test_bed_options = TestBedOptions(_options)
         self._test_bed_adapter = TestBedAdapter(self._test_bed_options)
         self.logger = LogManager(options=self._test_bed_options)
-        self.logger.info(f"Initializing kafka: ClientId[{ENV.CLIENT_ID}], Consume{ENV.CONSUME}, Produce{ENV.PRODUCE}")
+        self.logger.info(
+            f"Initializing kafka: ClientId[{ENV.CLIENT_ID}], Consume[{ENV.CONSUME}], Produce[{ENV.PRODUCE}]")
         self.logger.info(f"Connected to kafka: {_options}")
 
     def _handle_message(self, message, topic):
