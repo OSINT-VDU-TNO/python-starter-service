@@ -86,6 +86,10 @@ class StarterService(ABC):
             raise Exception("Kafka is not initialized")
         self._kafka.send_message(message, topics=topic, testing=testing)
 
+    def is_ok(self) -> bool:
+        """Return True if service is ready to receive messages, False otherwise."""
+        return self._kafka is not None and self._api is not None
+
     def kafka_callback(self):
         """Override this method to callback after service is initialized"""
         pass
