@@ -25,6 +25,14 @@ class StarterService(ABC):
         self._initialize()
         self._schema_registry = None
 
+    @property
+    def api(self):
+        return self._api
+
+    @property
+    def kafka(self):
+        return self._kafka
+
     @abstractmethod
     def ready(self) -> bool:
         """Return True if service is ready to receive messages, False otherwise."""
@@ -66,6 +74,8 @@ class StarterService(ABC):
             _kafka_callback()
             self.logger.error(f'Error initializing kafka: {e}')
 
+        self.callback()
+
     def _register_api(self, _kafka_status, callback):
         try:
             self._api = APIServer(name=self.name, ready=self.ready, health=self.health, kafka_status=_kafka_status,
@@ -95,5 +105,9 @@ class StarterService(ABC):
         pass
 
     def api_callback(self):
+        """Override this method to callback after service is initialized"""
+        pass
+
+    def callback(self):
         """Override this method to callback after service is initialized"""
         pass

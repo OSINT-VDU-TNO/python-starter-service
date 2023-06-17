@@ -44,8 +44,6 @@ class KafkaAdapter(Thread):
         """Start the service"""
         self._init_producers()
         self._test_bed_adapter.initialize()
-        listener_threads = []
-        run = True
 
         # Create threads for each consume topic
         for topic in ENV.CONSUME.split(','):
@@ -56,43 +54,16 @@ class KafkaAdapter(Thread):
             _consumer = ConsumerManager(
                 options=self._test_bed_options,
                 kafka_topic=topic,
-                handle_message=self._handle_message,
-                run=lambda: run
+                handle_message=self._handle_message
             )
+            _consumer.start()
             self.logger.info(f"Registering schema from kafka for {topic}")
             SchemaRegistry.register_schema(_consumer.schema_str, topic)
             self.logger.info(f"Initializing listener for topic {topic}")
-            listener_threads.append(threading.Thread(
-                target=_consumer.listen)
-            )
-
-        # start all threads
-        for thread in listener_threads:
-            thread.daemon = True
-            thread.start()
 
         if self._callback:
             self._callback()
 
-        while run:
-            # make sure we check thread health every 10 sec
-            time.sleep(10)
-            for thread in listener_threads:
-                if not thread.is_alive():
-                    run = False
-                    self.logger.error("Thread died, shutting down")
-
-        # Stop test bed
-        self._test_bed_adapter.stop()
-        for producer in self._producers.values():
-            self.logger.info(f"Stopping producer {producer}")
-            producer.stop()
-
-        # Clean after ourselves
-        for thread in listener_threads:
-            thread.join()
-
-        raise Exception
 
     def send_message(self, message, topics=None, testing=False):
         """Send message to kafka topic"""

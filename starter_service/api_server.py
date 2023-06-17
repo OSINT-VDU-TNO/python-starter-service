@@ -10,7 +10,6 @@ from starlette.status import HTTP_200_OK
 
 from starter_service.api import API
 from starter_service.env import ENV
-from starter_service.messages import MessageHistory
 from starter_service.schemas import SchemaRegistry
 
 
@@ -20,17 +19,17 @@ class APIServer:
                  base_service=None, callback=None, **kwargs):
         self.name = name
         self._validated()
-        self.app = FastAPI(title=self.name)
-        self.router = APIRouter()
+        self._fast_api = FastAPI(title=self.name)
+        self._router = APIRouter()
         self.callback = callback
 
-        @self.app.exception_handler(Exception)
+        @self._fast_api.exception_handler(Exception)
         async def validation_exception_handler(request, err):
             base_error_message = f"Failed to execute: {request.method}: {request.url}"
             # Change here to LOGGER
             return JSONResponse(status_code=400, content={"message": f"{base_error_message}. Detail: {err}"})
 
-        @self.app.exception_handler(ValidationError)
+        @self._fast_api.exception_handler(ValidationError)
         async def validation_exception_handler(request, err):
             base_error_message = f"Failed to execute: {request.method}: {request.url}"
             # Change here to LOGGER
@@ -50,14 +49,21 @@ class APIServer:
         self._base_service = base_service
 
         self._register_static_routes()
-        self._register_message_routes()
         self._register_dynamic_routes()
-        self.app.include_router(self.router)
+        self._fast_api.include_router(self._router)
+
+    @property
+    def fast_api(self):
+        return self._fast_api
+
+    @property
+    def router(self):
+        return self._router
 
     def _register_static_routes(self):
         self._logger.info("Registering static routes")
 
-        @self.router.get("/")
+        @self._router.get("/")
         def root():
             return {
                 "client_id": ENV.CLIENT_ID,
@@ -86,7 +92,7 @@ class APIServer:
                 "methods": API.functions
             }
 
-        @self.router.get("/api/health", tags=["status"])
+        @self._router.get("/api/health", tags=["status"])
         def health(verbose: bool = False):
             """Return health status"""
             health = self._health()
@@ -98,7 +104,7 @@ class APIServer:
             else:
                 return Response(status_code=503)
 
-        @self.router.get("/api/ready", tags=["status"])
+        @self._router.get("/api/ready", tags=["status"])
         def ready():
             """Return 200 OK if server is ready"""
             response = self._ready()
@@ -123,7 +129,7 @@ class APIServer:
 
     def _run(self):
         import uvicorn
-        uvicorn.run(self.app, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT)
+        uvicorn.run(self._fast_api, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT)
 
     def _validated(self):
         """Validate that the server is configured correctly"""
@@ -147,36 +153,5 @@ class APIServer:
         path = f"/api{f'/{consumer}' if consumer else ''}{f'/{producer}' if producer else ''}"
 
         func_wrapper.__annotations__ = {'message': consumer_class, 'return': producer_class}
-        self.router.add_api_route(path, func_wrapper, methods=[_type], response_model=producer_class, tags=["topics"],
-                                  summary=doc)
-
-    def _register_message_routes(self):
-        # TODO fully test this
-        if not ENV.REST_LOG_MESSAGES:
-            return
-
-        @self.router.get("/api/messages/consume", tags=["messages"])
-        def consume():
-            """Return last consumed messages"""
-            return MessageHistory.get_incoming_messages()
-
-        @self.router.get("/api/messages/consume/{uuid}", tags=["messages"])
-        def consume_uuid(uuid: str):
-            """Return consumed message by uuid"""
-            msg = MessageHistory.get_incoming_message(uuid)
-            if msg:
-                return msg
-            return Response(status_code=404)
-
-        @self.router.get("/api/messages/produce", tags=["messages"])
-        def produce():
-            """Return last produced messages"""
-            return MessageHistory.get_outgoing_messages()
-
-        @self.router.get("/api/messages/produce/{uuid}", tags=["messages"])
-        def produce_uuid(uuid: str):
-            """Return produced message by uuid"""
-            msg = MessageHistory.get_outgoing_message(uuid)
-            if msg:
-                return msg
-            return Response(status_code=404)
+        self._router.add_api_route(path, func_wrapper, methods=[_type], response_model=producer_class, tags=["topics"],
+                                   summary=doc)
