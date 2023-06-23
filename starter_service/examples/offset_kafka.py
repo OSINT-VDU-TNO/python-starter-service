@@ -44,4 +44,4 @@ class ManualKafka(StarterService):
 
 
 if __name__ == '__main__':
-    ManualKafka()
+    ManualKafka().start()

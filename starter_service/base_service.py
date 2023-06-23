@@ -1,7 +1,7 @@
 import logging
-import traceback
+import sys
 from abc import ABC, abstractmethod
-from threading import Thread
+from time import sleep
 
 from starter_service.api_server import APIServer
 from starter_service.env import ENV
@@ -18,20 +18,16 @@ class StarterService(ABC):
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self._kafka = None
-        self._api = None
-        self._schemas = None
-        self._functions = None
+        self.running = True
+
+        # Initialize services
+        self.kafka = None
+        self.api = None
+
+        self.kafka_error = None
+        self.api_error = None
+
         self._initialize()
-        self._schema_registry = None
-
-    @property
-    def api(self):
-        return self._api
-
-    @property
-    def kafka(self):
-        return self._kafka
 
     @abstractmethod
     def ready(self) -> bool:
@@ -46,68 +42,76 @@ class StarterService(ABC):
     def _initialize(self):
         """Initialize services"""
         self.name = ENV.CLIENT_ID = ENV.CLIENT_ID or self.name or self.__class__.__name__
-
-        """Initialize Schema Registry"""
+        # Initialize schema registry
         SchemaRegistry.initialize(self.path)
-
-        def _api_callback():
-            """Callback for API Server, called when API Server is ready or when an error occurs"""
-            self.logger.info("API callback")
-            self.api_callback()
-
-        def _kafka_callback():
-            """Callback for Kafka Adapter, called when Kafka Adapter is ready or when an error occurs"""
-            self.logger.info("Kafka callback")
-            if self.kafka_callback:
-                Thread(target=self.kafka_callback).start()
-            self._register_api(_kafka_status, _api_callback)
-
-        """Initialize services"""
-        _kafka_status = "ok"
-        self.logger.info("Initializing kafka")
         try:
-            self._kafka = KafkaAdapter(callback=_kafka_callback, base_service=self)
-            self._kafka.start()
+            self.kafka = KafkaAdapter()
+            self.kafka.callback = self.kafka_callback
+            self.kafka.base_service = self
             self.logger.info(f"Kafka initialized.")
         except Exception as e:
-            _kafka_status = f"Error: {e}"
-            _kafka_callback()
+            self.kafka_error = f'Error initializing kafka: {e}'
             self.logger.error(f'Error initializing kafka: {e}')
+            self.kafka_callback(error=e)
 
-        self.callback()
-
-    def _register_api(self, _kafka_status, callback):
         try:
-            self._api = APIServer(name=self.name, ready=self.ready, health=self.health, kafka_status=_kafka_status,
-                                  base_service=self, callback=callback)
-            self._api.start()
-            self.logger.info(f"REST API initialized.")
+            self.api = APIServer(name=self.name, ready=self.ready, health=self.health)
+            self.api.callback = self.api_callback
+            self.api.base_service = self
+            self.logger.info(f"API initialized.")
         except Exception as e:
-            self.logger.error(f'Error initializing api: {e}')
-            traceback.print_exc()
+            self.api_error = f'Error initializing API: {e}'
+            self.logger.error(f'Error initializing API: {e}')
+            self.api_callback(error=e)
 
-        if self._kafka is None and self._api is None:
-            self.logger.error('No services initialized. Shutting down.')
-            exit(1)
+    def start(self):
+        """Start the service"""
+        try:
+            if self.kafka:
+                self.logger.info("Starting service Kafka...")
+                self.kafka.start()
+            self.logger.info("Starting service API...")
+            sleep(3)
+            # Wait for kafka to start and register schemas
+            self.callback(kafka_error=self.kafka_error, api_error=self.api_error)
+            if self.api:
+                self.api.run()
+
+            if self.kafka is None and self.api is None:
+                raise Exception('No services initialized. Shutting down.')
+
+        except Exception as e:
+            self.logger.info(f"Error starting services: {e}")
+            self.stop()
+
+    def stop(self):
+        """Stop the service"""
+        self.logger.info("Stopping service...")
+        if self.kafka:
+            self.kafka.stop()
+            self.kafka.join()
+        if self.api:
+            self.api.stop()
+        sys.exit(0)
 
     def send_message(self, message, topic, testing=True):
         """Send message to Kafka"""
-        if self._kafka is None:
+        if self.kafka is None:
             raise Exception("Kafka is not initialized")
-        self._kafka.send_message(message, topics=topic, testing=testing)
+        self.kafka.send_message(message, topics=topic, testing=testing)
 
     def is_ok(self) -> bool:
         """Return True if service is ready to receive messages, False otherwise."""
-        return self._kafka is not None and self._api is not None
+        return self.kafka is not None and self.api is not None
 
-    def kafka_callback(self):
+    def kafka_callback(self, **kwargs):
         """Override this method to callback after service is initialized"""
         pass
 
-    def api_callback(self):
+    def api_callback(self, **kwargs):
         """Override this method to callback after service is initialized"""
         pass
 
-    def callback(self):
+    def callback(self, **kwargs):
         """Override this method to callback after service is initialized"""
         pass

@@ -39,4 +39,4 @@ class MultiRoutes(StarterService):
 
 
 if __name__ == '__main__':
-    MultiRoutes()
+    MultiRoutes().start()

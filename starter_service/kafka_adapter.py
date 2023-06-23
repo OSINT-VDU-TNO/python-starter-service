@@ -1,34 +1,27 @@
 import logging
-import threading
-import time
-import traceback
-from threading import Thread
+from time import sleep
 
+from starter_service.api import API
+from starter_service.env import ENV
+from starter_service.schemas import SchemaRegistry
+from starter_service.sub_process import SubProcess
 from test_bed_adapter import TestBedOptions, TestBedAdapter
 from test_bed_adapter.kafka.consumer_manager import ConsumerManager
 from test_bed_adapter.kafka.log_manager import LogManager
 from test_bed_adapter.kafka.producer_manager import ProducerManager
 
-from starter_service.api import API
-from starter_service.env import ENV
-from starter_service.schemas import SchemaRegistry
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
 
-class KafkaAdapter(Thread):
+class KafkaAdapter(SubProcess):
     """Kafka adapter"""
 
-    def __init__(self, callback=None, base_service=None) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.daemon = True
-        # Initialize logger
-        self.logger = None
         # Initialize test bed adapter
         self._test_bed_adapter = None
         # Initialize test bed options
         self._test_bed_options = None
-
         # Validate environment variables
         self._validate_params()
         # Initialize test bed options
@@ -37,33 +30,46 @@ class KafkaAdapter(Thread):
         self._producers = {}
         self._consumers = {}
 
-        self._callback = callback
-        self._base_service = base_service
-
-    def start(self):
+    def run(self):
         """Start the service"""
         self._init_producers()
         self._test_bed_adapter.initialize()
-
+        self._init_logger()
         # Create threads for each consume topic
         for topic in ENV.CONSUME.split(','):
             topic = topic.strip()
             if not topic:
                 self.logger.warning("Empty topic, skipping")
                 continue
-            _consumer = ConsumerManager(
-                options=self._test_bed_options,
-                kafka_topic=topic,
-                handle_message=self._handle_message
-            )
-            _consumer.start()
-            self.logger.info(f"Registering schema from kafka for {topic}")
-            SchemaRegistry.register_schema(_consumer.schema_str, topic)
-            self.logger.info(f"Initializing listener for topic {topic}")
+            try:
+                _consumer = ConsumerManager(
+                    options=self._test_bed_options,
+                    kafka_topic=topic,
+                    handle_message=self._handle_message
+                )
+                self._consumers[topic] = _consumer
+                self.logger.info(f"Registering schema from kafka for {topic}")
+                SchemaRegistry.register_schema(_consumer.schema_str, topic)
+            except:
+                self.logger.error(f"Could not initialize consumer for topic {topic}")
 
         if self._callback:
             self._callback()
 
+        # Start listening for messages
+        for consumer in self._consumers.values():
+            try:
+                consumer.start()
+                self.logger.info(f"Initializing listener for topic {topic}")
+            except:
+                self.logger.error("Could not start consumer")
+
+        while self.running:
+            sleep(1)
+
+        for consumer in self._consumers.values():
+            consumer.stop()
+            consumer.join()
 
     def send_message(self, message, topics=None, testing=False):
         """Send message to kafka topic"""
@@ -108,6 +114,12 @@ class KafkaAdapter(Thread):
             self._producers[topic] = _producer
             SchemaRegistry.register_schema(_producer.schema_str, topic)
 
+    def _init_logger(self):
+        try:
+            self.base_service.logger = self.logger
+        except:
+            pass
+
     def _init_options(self):
         _options = {
             "kafka_host": ENV.KAFKA_HOST,
@@ -135,12 +147,10 @@ class KafkaAdapter(Thread):
 
         funcs = API.get_func_by_consumer(topic)
         for consumer, producer, doc, func, _type in funcs:
-            # self.logger.info(f'Found function form {consumer}, to {producer}')
             try:
                 response = func(self._base_service, message)
                 if producer and response:
                     self.logger.info(f"Sending response: {producer}, {str(response)[:100]}")
                     self.send_message(response, topics=producer)
             except Exception as e:
-                traceback.print_exc()
                 self.logger.error(e)

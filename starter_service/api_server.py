@@ -1,27 +1,29 @@
 import datetime
 import logging
-import threading
 
+import uvicorn
 from fastapi import FastAPI, APIRouter
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 from starlette.responses import Response, JSONResponse
 from starlette.status import HTTP_200_OK
-
 from starter_service.api import API
 from starter_service.env import ENV
-from starter_service.schemas import SchemaRegistry
+from starter_service.sub_process import SubProcess
+from uvicorn import Config
 
 
-class APIServer:
+class APIServer(SubProcess):
 
-    def __init__(self, name=None, ready: callable = None, health: callable = None, kafka_status: str = None,
-                 base_service=None, callback=None, **kwargs):
+    def __init__(self, name=None, ready: callable = None, health: callable = None, **kwargs):
+        super().__init__()
         self.name = name
+        self.server = None
+        self.logger = logging.getLogger(__name__)
+
         self._validated()
         self._fast_api = FastAPI(title=self.name)
         self._router = APIRouter()
-        self.callback = callback
 
         @self._fast_api.exception_handler(Exception)
         async def validation_exception_handler(request, err):
@@ -35,22 +37,11 @@ class APIServer:
             # Change here to LOGGER
             return JSONResponse(status_code=400, content={"message": f"{base_error_message}. Detail: {err}"})
 
-        self.host = ENV.REST_API_HOST
-        self.port = ENV.REST_API_PORT
-        self._logger = logging.getLogger(__name__)
-
+        # service
         self._ready = ready
         self._health = health
-        self._kafka_status = kafka_status
 
-        self._thread = None
         self._uptime = None
-        self._running = False
-        self._base_service = base_service
-
-        self._register_static_routes()
-        self._register_dynamic_routes()
-        self._fast_api.include_router(self._router)
 
     @property
     def fast_api(self):
@@ -61,17 +52,19 @@ class APIServer:
         return self._router
 
     def _register_static_routes(self):
-        self._logger.info("Registering static routes")
+        self.logger.info("Registering static routes")
 
         @self._router.get("/")
         def root():
+            from starter_service.schemas import SchemaRegistry
             return {
                 "client_id": ENV.CLIENT_ID,
                 "uptime": self._uptime,
                 "docs": "/docs",
                 "redoc": "/redoc",
                 "openapi": "/openapi.json",
-                "kafka": {"error": self._kafka_status} if self._kafka_status != "ok" else {
+                "kafka": {
+                    "error": self.base_service.kafka_error} if self.base_service and self.base_service.kafka_error else {
                     "status": "ok",
                     "host": ENV.KAFKA_HOST,
                     "schema_registry": ENV.SCHEMA_REGISTRY,
@@ -113,23 +106,30 @@ class APIServer:
             else:
                 return Response(status_code=503)
 
-    def start(self):
+    def run(self):
         """Start the server"""
-        self._logger.info("Starting API server")
+        self.logger.info("Starting API server")
+
+        self._register_static_routes()
+        self._register_dynamic_routes()
+        self._fast_api.include_router(self._router)
+
         self._running = True
         self._uptime = datetime.datetime.now().isoformat()
-        self._thread = threading.Thread(target=self._run)
-        self._thread.start()
-        self.callback()
+        if self.callback:
+            self.callback()
+        try:
+            self.logger.info(f"Starting API server on {ENV.REST_API_HOST}:{ENV.REST_API_PORT}")
+            server = uvicorn.Server(config=Config(self._fast_api, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT))
+            server.run()
+        except Exception as e:
+            self.logger.error(f"Failed to start API server: {e}")
+            self.stop()
 
     def stop(self):
-        self._logger.info("Stopping API server")
-        self._running = False
-        self._thread.join()
-
-    def _run(self):
-        import uvicorn
-        uvicorn.run(self._fast_api, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT)
+        self.logger.info("Stopping API server")
+        self.running = False
+        self.server.stop()
 
     def _validated(self):
         """Validate that the server is configured correctly"""
@@ -138,18 +138,19 @@ class APIServer:
 
     def _register_dynamic_routes(self):
         """Register routes that are dynamically added by the user"""
-        self._logger.info("Registering dynamic routes")
+        self.logger.info("Registering dynamic routes")
         for consumer, producer, doc, func, _type in API.functions:
             self._register_route(consumer, producer, doc, func, _type)
 
     def _register_route(self, consumer, producer, doc, func, _type):
         """Register a route"""
+        from starter_service.schemas import SchemaRegistry
         consumer_class = SchemaRegistry.get_schema(consumer)
         producer_class = SchemaRegistry.get_schema(producer)
 
-        self._logger.info(f"Registering route {consumer}:{consumer_class} -> {producer}:{producer_class} ({doc})")
-        func_wrapper = lambda message: func(self._base_service, message) \
-            if isinstance(message, str) else func(self._base_service, jsonable_encoder(message))
+        self.logger.info(f"Registering route {consumer}:{consumer_class} -> {producer}:{producer_class} ({doc})")
+        func_wrapper = lambda message: func(self.base_service, message) \
+            if isinstance(message, str) else func(self.base_service, jsonable_encoder(message))
         path = f"/api{f'/{consumer}' if consumer else ''}{f'/{producer}' if producer else ''}"
 
         func_wrapper.__annotations__ = {'message': consumer_class, 'return': producer_class}

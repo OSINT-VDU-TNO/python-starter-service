@@ -21,4 +21,4 @@ class SingleRoute(StarterService):
 
 
 if __name__ == '__main__':
-    SingleRoute()
+    SingleRoute().start()
