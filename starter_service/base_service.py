@@ -1,5 +1,6 @@
 import logging
 import sys
+import threading
 from abc import ABC, abstractmethod
 from time import sleep
 
@@ -71,9 +72,14 @@ class StarterService(ABC):
                 self.logger.info("Starting service Kafka...")
                 self.kafka.start()
             self.logger.info("Starting service API...")
-            sleep(3)
             # Wait for kafka to start and register schemas
+            sleep(3)
+
+            # Callback
             self.callback(kafka_error=self.kafka_error, api_error=self.api_error)
+            # Async callback
+            threading.Thread(target=self.async_callback, daemon=True).start()
+
             if self.api:
                 self.api.run()
 
@@ -113,5 +119,9 @@ class StarterService(ABC):
         pass
 
     def callback(self, **kwargs):
+        """Override this method to callback after service is initialized"""
+        pass
+
+    def async_callback(self, **kwargs):
         """Override this method to callback after service is initialized"""
         pass
