@@ -5,7 +5,8 @@ from starter_service.api import API
 from starter_service.env import ENV
 from starter_service.schemas import SchemaRegistry
 from starter_service.sub_process import SubProcess
-from test_bed_adapter import TestBedOptions, TestBedAdapter
+from test_bed_adapter import TestBedAdapter
+from test_bed_adapter import TestBedOptions
 from test_bed_adapter.kafka.consumer_manager import ConsumerManager
 from test_bed_adapter.kafka.log_manager import LogManager
 from test_bed_adapter.kafka.producer_manager import ProducerManager
@@ -29,8 +30,25 @@ class KafkaAdapter(SubProcess):
         # Initialize producers and consumers
         self._producers = {}
         self._consumers = {}
+        # Initialize logger
+        self.logger = logging.getLogger(__name__)
+        self.error_msg = None
 
     def run(self):
+        """Start the service"""
+        try:
+            self._test_bed_adapter = TestBedAdapter(self._test_bed_options)
+            self.logger = LogManager(options=self._test_bed_options)
+            self.logger.info(f"Kafka ClientId[{ENV.CLIENT_ID}], Consume[{ENV.CONSUME}], Produce[{ENV.PRODUCE}]")
+            self.connect()
+            self.error_msg = None
+        except Exception as e:
+            self.error_msg = f"Error starting service: {e}"
+            self.logger.error(f"Error starting service: {e}, Restarting... in 30 seconds")
+            sleep(30)
+            self.run()
+
+    def connect(self):
         """Start the service"""
         self._init_producers()
         self._test_bed_adapter.initialize()
@@ -65,11 +83,22 @@ class KafkaAdapter(SubProcess):
                 self.logger.error("Could not start consumer")
 
         while self.running:
-            sleep(1)
+            for consumer in self._consumers.values():
+                if not consumer.is_alive():
+                    self.logger.error("Consumer thread died, exiting...")
+                    self.running = False
+                    break
+            sleep(10)
 
         for consumer in self._consumers.values():
-            consumer.stop()
-            consumer.join()
+            try:
+                consumer.stop()
+                consumer.join()
+            except:
+                self.logger.error("Could not stop consumer")
+
+        self.logger.info("Stopping service...")
+        self.base_service.stop()
 
     def send_message(self, message, topics=None, testing=False):
         """Send message to kafka topic"""
@@ -134,11 +163,6 @@ class KafkaAdapter(SubProcess):
             "use_latest": ENV.USE_LATEST
         }
         self._test_bed_options = TestBedOptions(_options)
-        self._test_bed_adapter = TestBedAdapter(self._test_bed_options)
-        self.logger = LogManager(options=self._test_bed_options)
-        self.logger.info(
-            f"Initializing kafka: ClientId[{ENV.CLIENT_ID}], Consume[{ENV.CONSUME}], Produce[{ENV.PRODUCE}]")
-        self.logger.info(f"Connected to kafka: {_options}")
 
     def _handle_message(self, message, topic):
         self.logger.info(f"Received message for topic {topic}")
