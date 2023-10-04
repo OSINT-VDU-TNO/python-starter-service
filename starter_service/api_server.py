@@ -7,10 +7,11 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 from starlette.responses import Response, JSONResponse
 from starlette.status import HTTP_200_OK
+from uvicorn import Config
+
 from starter_service.api import API
 from starter_service.env import ENV
 from starter_service.sub_process import SubProcess
-from uvicorn import Config
 
 
 class APIServer(SubProcess):
@@ -57,6 +58,7 @@ class APIServer(SubProcess):
         @self._router.get("/")
         def root():
             from starter_service.schemas import SchemaRegistry
+            kafka_error = self._check_kafka_error()
             return {
                 "client_id": ENV.CLIENT_ID,
                 "uptime": self._uptime,
@@ -64,8 +66,8 @@ class APIServer(SubProcess):
                 "redoc": "/redoc",
                 "openapi": "/openapi.json",
                 "kafka": {
-                    "error": self.base_service.kafka_error} if self.base_service and self.base_service.kafka_error else {
-                    "status": "ok",
+                    "error": kafka_error,
+                    "status": "Connected" if kafka_error is None else "Error",
                     "host": ENV.KAFKA_HOST,
                     "schema_registry": ENV.SCHEMA_REGISTRY,
                     "partitioner": ENV.PARTITIONER,
@@ -74,6 +76,8 @@ class APIServer(SubProcess):
                     "offset_type": ENV.OFFSET_TYPE,
                     "ignore_timeout": ENV.IGNORE_TIMEOUT,
                     "use_latest": ENV.USE_LATEST,
+                    "max_poll_interval_ms": ENV.MAX_POLL_INTERVAL_MS,
+                    "session_timeout_ms": ENV.SESSION_TIMEOUT_MS,
                     "topics": {
                         "consume": ENV.CONSUME,
                         "produce": ENV.PRODUCE
@@ -120,8 +124,8 @@ class APIServer(SubProcess):
             self.callback()
         try:
             self.logger.info(f"Starting API server on {ENV.REST_API_HOST}:{ENV.REST_API_PORT}")
-            server = uvicorn.Server(config=Config(self._fast_api, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT))
-            server.run()
+            self.server = uvicorn.Server(config=Config(self._fast_api, host=ENV.REST_API_HOST, port=ENV.REST_API_PORT))
+            self.server.run()
         except Exception as e:
             self.logger.error(f"Failed to start API server: {e}")
             self.stop()
@@ -129,7 +133,7 @@ class APIServer(SubProcess):
     def stop(self):
         self.logger.info("Stopping API server")
         self.running = False
-        self.server.stop()
+        self.server.should_exit = True
 
     def _validated(self):
         """Validate that the server is configured correctly"""
@@ -156,3 +160,13 @@ class APIServer(SubProcess):
         func_wrapper.__annotations__ = {'message': consumer_class, 'return': producer_class}
         self._router.add_api_route(path, func_wrapper, methods=[_type], response_model=producer_class, tags=["topics"],
                                    summary=doc)
+
+    def _check_kafka_error(self):
+        """Check if there is a kafka error"""
+        if not self.base_service:
+            return "Base service not initialized"
+        if not self.base_service.kafka:
+            return "Kafka not initialized"
+        if self.base_service.kafka.error_msg:
+            return self.base_service.kafka.error_msg
+        return None

@@ -1,15 +1,16 @@
 import logging
 from time import sleep
 
-from starter_service.api import API
-from starter_service.env import ENV
-from starter_service.schemas import SchemaRegistry
-from starter_service.sub_process import SubProcess
 from test_bed_adapter import TestBedAdapter
 from test_bed_adapter import TestBedOptions
 from test_bed_adapter.kafka.consumer_manager import ConsumerManager
 from test_bed_adapter.kafka.log_manager import LogManager
 from test_bed_adapter.kafka.producer_manager import ProducerManager
+
+from starter_service.api import API
+from starter_service.env import ENV
+from starter_service.schemas import SchemaRegistry
+from starter_service.sub_process import SubProcess
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 
@@ -68,19 +69,21 @@ class KafkaAdapter(SubProcess):
                 self._consumers[topic] = _consumer
                 self.logger.info(f"Registering schema from kafka for {topic}")
                 SchemaRegistry.register_schema(_consumer.schema_str, topic)
-            except:
-                self.logger.error(f"Could not initialize consumer for topic {topic}")
+            except Exception as e:
+                self.logger.error(f"Could not initialize consumer for topic {topic}, {e}")
+                self.error_msg = f"Could not initialize consumer for topic {topic}, {e}"
 
         if self._callback:
             self._callback()
 
         # Start listening for messages
-        for consumer in self._consumers.values():
+        for topic, consumer in self._consumers.items():
             try:
                 consumer.start()
                 self.logger.info(f"Initializing listener for topic {topic}")
-            except:
-                self.logger.error("Could not start consumer")
+            except Exception as e:
+                self.logger.error(f"Could not start consumer, {e}")
+                self.error_msg = f"Could not start consumer, {e}"
 
         while self.running:
             for consumer in self._consumers.values():
@@ -160,7 +163,9 @@ class KafkaAdapter(SubProcess):
             "heartbeat_interval": ENV.HEARTBEAT_INTERVAL,
             "string_based_keys": ENV.STRING_BASED_KEYS,
             "ignore_timeout": ENV.IGNORE_TIMEOUT,
-            "use_latest": ENV.USE_LATEST
+            "use_latest": ENV.USE_LATEST,
+            "max_poll_interval.ms": ENV.MAX_POLL_INTERVAL_MS,
+            "session_timeout_ms": ENV.SESSION_TIMEOUT_MS,
         }
         self._test_bed_options = TestBedOptions(_options)
 
