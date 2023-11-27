@@ -112,6 +112,12 @@ class StarterService(ABC):
             self.logger.error(f"Error stopping API: {e}")
         sys.exit(0)
 
+    def pause(self):
+        self.kafka.pause_consuming()
+
+    def resume(self):
+        self.kafka.resume_consuming()
+
     def send_message(self, message, topic, testing=True):
         """Send message to Kafka"""
         if self.kafka is None:

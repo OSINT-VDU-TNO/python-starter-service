@@ -34,6 +34,7 @@ class KafkaAdapter(SubProcess):
         # Initialize logger
         self.logger = logging.getLogger(__name__)
         self.error_msg = None
+        self.paused = False
 
     def run(self):
         """Start the service"""
@@ -123,6 +124,26 @@ class KafkaAdapter(SubProcess):
                 if ENV.DEBUG:
                     self.logger.info(f"Sending message to {topic}\n{message}")
                 producer.send_messages(messages=[message])
+
+    def pause_consuming(self):
+        """Pause consuming all topics"""
+        if not self.paused:
+            for topic, consumer in self._consumers.items():
+                try:
+                    consumer.pause(topic)
+                except Exception as e:
+                    self.logger.error(f"Could not pause consumer: {e}")
+            self.paused = True
+
+    def resume_consuming(self):
+        """Resume consuming all topics"""
+        if self.paused:
+            for topic, consumer in self._consumers.items():
+                try:
+                    consumer.resume(topic)
+                except Exception as e:
+                    self.logger.error(f"Could not resume consumer: {e}")
+            self.paused = False
 
     def _validate_params(self):
         """Validate that all required params are set"""
