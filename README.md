@@ -24,7 +24,7 @@ Main ENV variables:
 
 - `CONSUME` - comma separated list of topics to consume
 - `PRODUCE` - comma separated list of topics to produce
-- `KAFKA_HOST` - kafka host
+- `KAFKA_HOST` - Kafka host
 - `SCHEMA_REGISTRY` - schema registry host
 - `MAX_POLL_INTERVAL_MS` - max poll interval in ms (default: `600000`)
 - `SESSION_TIMEOUT_MS` - session timeout in ms (default: `600000`)
