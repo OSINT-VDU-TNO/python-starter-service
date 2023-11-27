@@ -3,6 +3,12 @@
 This is a starter service project template.
 Use this template to create a new service project.
 
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt # Or instead of `pip`, use `pip3`
+```
+
 ## Getting started
 
 First you need to provide ENV variables for the service to run.
